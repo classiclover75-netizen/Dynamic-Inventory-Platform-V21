@@ -1519,6 +1519,12 @@ app.put('/api/pages/:name(*)/rename', async (req, res) => {
         newConfig.linkedSourcePage = newName;
         await Page.findByIdAndUpdate(p._id, { config: newConfig });
       }
+      const searchLinkedPages = await Page.find({ "config.secondarySearchPage": name });
+      for (const p of searchLinkedPages) {
+        const newConfig = { ...(p.config || {}) };
+        newConfig.secondarySearchPage = newName;
+        await Page.findByIdAndUpdate(p._id, { config: newConfig });
+      }
       await triggerLocalBackup();
     } else {
       const db = await getLocalDB();
@@ -1528,6 +1534,9 @@ app.put('/api/pages/:name(*)/rename', async (req, res) => {
       db.pages.forEach((p: any) => {
         if (p.config && p.config.linkedSourcePage === name) {
           p.config.linkedSourcePage = newName;
+        }
+        if (p.config && p.config.secondarySearchPage === name) {
+          p.config.secondarySearchPage = newName;
         }
       });
       await saveLocalDB(db);
@@ -1549,12 +1558,23 @@ app.delete('/api/pages/:name(*)', async (req, res) => {
       await PageRow.deleteMany({ pageName: name });
       
       const linkedPages = await Page.find({ "config.linkedSourcePage": name });
+      const linkedNames = linkedPages.map((p: any) => p.name);
+      const allDeletedNames = [name, ...linkedNames];
+      
       for (const p of linkedPages) {
         const linkedPageRows = await getSortedPageRows({ pageName: p.name });
         deletedRows.push(...linkedPageRows.map((r: any) => r.data));
         await Page.findOneAndDelete({ name: p.name });
         await PageRow.deleteMany({ pageName: p.name });
       }
+      
+      const searchLinkedPages = await Page.find({ "config.secondarySearchPage": { $in: allDeletedNames } });
+      for (const p of searchLinkedPages) {
+        const newConfig = { ...(p.config || {}) };
+        delete newConfig.secondarySearchPage;
+        await Page.findByIdAndUpdate(p._id, { config: newConfig });
+      }
+      
       await triggerLocalBackup();
     } else {
       const db = await getLocalDB();
@@ -1573,6 +1593,14 @@ app.delete('/api/pages/:name(*)', async (req, res) => {
         }
         return true;
       });
+      
+      const allDeletedNames = [name, ...linkedPageNames];
+      db.pages.forEach((p: any) => {
+        if (p.config && p.config.secondarySearchPage && allDeletedNames.includes(p.config.secondarySearchPage)) {
+          delete p.config.secondarySearchPage;
+        }
+      });
+      
       await saveLocalDB(db);
     }
     await cleanupOrphanImages(deletedRows, [], false, name);

@@ -65,6 +65,7 @@ import { ColumnResizeHandle } from "./components/ColumnResizeHandle";
 import { CreateTrackerSelectionModal } from "./components/CreateTrackerSelectionModal";
 import { decodeHtmlEntities, renderHighlightedText, parseMultiSource } from "./lib/appUtils";
 import { savePageConfig, patchRow, deleteRow, putRows, appendPageRows, bulkPatchRows } from "./lib/api";
+import { renamePageRefs, cleanDeletedPageRefs } from "./lib/pageRefSync";
 import {
   AppState,
   Column,
@@ -790,11 +791,13 @@ function AppContent() {
         newRows[newName] = newRows[oldName];
         delete newRows[oldName];
 
+        const syncedConfigs = renamePageRefs(newConfigs, oldName, newName);
+
         return {
           ...prev,
           pages: newPages,
           activePage: newName,
-          pageConfigs: newConfigs,
+          pageConfigs: syncedConfigs,
           pageRows: newRows,
         };
       });
@@ -888,11 +891,14 @@ function AppContent() {
           delete newRows[trackerName];
         });
 
+        const deletedNames = [pageToDelete, ...linkedTrackers];
+        const syncedConfigs = cleanDeletedPageRefs(newConfigs, deletedNames);
+
         return {
           ...prev,
           pages: newPages,
           activePage: newPages.length > 0 ? newPages[0] : "",
-          pageConfigs: newConfigs,
+          pageConfigs: syncedConfigs,
           pageRows: newRows,
         };
       });
