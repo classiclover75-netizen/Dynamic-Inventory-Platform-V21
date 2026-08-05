@@ -13,7 +13,7 @@ import archiver from 'archiver';
 import AdmZip from 'adm-zip';
 import unzipper from 'unzipper';
 import multer from 'multer';
-import { isTrackerPage, resolveRowIds } from './src/server/trackerIdGuard';
+import { isTrackerPage, isLinkedPage, resolveRowIds } from './src/server/trackerIdGuard';
 
 const upload = multer({ dest: 'temp_uploads/' });
 
@@ -1765,17 +1765,19 @@ app.put('/api/pageRows/:name(*)', async (req, res) => {
     const skipImageProcessing = req.query.skipImageProcessing === 'true';
     
     let pageConfig: any = null;
+    let allPageConfigs: Record<string, any> = {};
     if (isUsingMongoDB) {
-      const pageDoc = await Page.findOne({ name }).lean();
-      pageConfig = pageDoc?.config;
+      const pages = await Page.find({}, { name: 1, config: 1 }).lean();
+      pages.forEach((p: any) => { allPageConfigs[p.name] = p.config; });
+      pageConfig = allPageConfigs[name] || null;
     } else {
       const db = await getLocalDB();
-      const p = db.pages.find((p: any) => p.name === name);
-      pageConfig = p?.config;
+      db.pages.forEach((p: any) => { allPageConfigs[p.name] = p.config; });
+      pageConfig = allPageConfigs[name] || null;
     }
 
     const isTracker = isTrackerPage(pageConfig);
-    const allowCrossPageSharedIds = isTracker;
+    const allowCrossPageSharedIds = isLinkedPage(name, pageConfig, allPageConfigs);
 
     const incomingIds = (rows || []).map((r: any) => String(r.id)).filter((id: string) => id && id !== 'undefined' && id !== 'null');
     let existingOtherIds = new Set<string>();
@@ -2066,17 +2068,19 @@ app.post('/api/pageRows/:name(*)/append', async (req, res) => {
     const forceSave = req.query.force === 'true';
 
     let pageConfig: any = null;
+    let allPageConfigs: Record<string, any> = {};
     if (isUsingMongoDB) {
-      const pageDoc = await Page.findOne({ name }).lean();
-      pageConfig = pageDoc?.config;
+      const pages = await Page.find({}, { name: 1, config: 1 }).lean();
+      pages.forEach((p: any) => { allPageConfigs[p.name] = p.config; });
+      pageConfig = allPageConfigs[name] || null;
     } else {
       const db = await getLocalDB();
-      const p = db.pages.find((p: any) => p.name === name);
-      pageConfig = p?.config;
+      db.pages.forEach((p: any) => { allPageConfigs[p.name] = p.config; });
+      pageConfig = allPageConfigs[name] || null;
     }
 
     const isTracker = isTrackerPage(pageConfig);
-    const allowCrossPageSharedIds = isTracker;
+    const allowCrossPageSharedIds = isLinkedPage(name, pageConfig, allPageConfigs);
 
     let existingOtherIds = new Set<string>();
     const incomingIds = (rows || []).map((r: any) => String(r.id)).filter((id: string) => id && id !== 'undefined' && id !== 'null');

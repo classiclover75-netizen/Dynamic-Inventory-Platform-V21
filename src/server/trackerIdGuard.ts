@@ -5,6 +5,16 @@ export function isTrackerPage(config: PageConfig | null | undefined): boolean {
   return !!(config?.linkedSourcePage && typeof config.linkedSourcePage === 'string' && config.linkedSourcePage.trim() !== '');
 }
 
+export function isLinkedPage(pageName: string, config: PageConfig | null | undefined, allPageConfigs: Record<string, PageConfig>): boolean {
+  if (isTrackerPage(config)) return true;
+  for (const c of Object.values(allPageConfigs)) {
+    if (c?.linkedSourcePage === pageName) {
+      return true;
+    }
+  }
+  return false;
+}
+
 interface ResolveOptions {
   allowCrossPageSharedIds: boolean;
   externalIdSet: Set<string>;
