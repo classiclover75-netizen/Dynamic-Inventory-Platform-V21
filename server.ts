@@ -13,6 +13,7 @@ import archiver from 'archiver';
 import AdmZip from 'adm-zip';
 import unzipper from 'unzipper';
 import multer from 'multer';
+import { isTrackerPage, resolveRowIds } from './src/server/trackerIdGuard';
 
 const upload = multer({ dest: 'temp_uploads/' });
 
@@ -1763,18 +1764,29 @@ app.put('/api/pageRows/:name(*)', async (req, res) => {
     const forceSave = req.query.force === 'true';
     const skipImageProcessing = req.query.skipImageProcessing === 'true';
     
+    let pageConfig: any = null;
+    if (isUsingMongoDB) {
+      const pageDoc = await Page.findOne({ name }).lean();
+      pageConfig = pageDoc?.config;
+    } else {
+      const db = await getLocalDB();
+      const p = db.pages.find((p: any) => p.name === name);
+      pageConfig = p?.config;
+    }
+
+    const isTracker = isTrackerPage(pageConfig);
+    const allowCrossPageSharedIds = isTracker;
+
     const incomingIds = (rows || []).map((r: any) => String(r.id)).filter((id: string) => id && id !== 'undefined' && id !== 'null');
     let existingOtherIds = new Set<string>();
     
-    if (isUsingMongoDB) {
-      if (incomingIds.length > 0) {
+    if (!allowCrossPageSharedIds && incomingIds.length > 0) {
+      if (isUsingMongoDB) {
         const otherRows = await PageRow.find({ pageName: { $ne: name }, 'data.id': { $in: incomingIds } }, { 'data.id': 1, _id: 0 }).lean();
         otherRows.forEach((r: any) => {
           if (r.data?.id) existingOtherIds.add(String(r.data.id));
         });
-      }
-    } else {
-      if (incomingIds.length > 0) {
+      } else {
         const db = await getLocalDB();
         db.pages.forEach((p: any) => {
           if (p.name !== name && p.rows) {
@@ -1786,20 +1798,11 @@ app.put('/api/pageRows/:name(*)', async (req, res) => {
       }
     }
 
-    let rowsToProcess = rows || [];
-    const seenIds = new Set<string>(existingOtherIds);
-    rowsToProcess = rowsToProcess.map((row: any) => {
-      if (!row.id || seenIds.has(String(row.id))) {
-        row.id = uuidv4();
-      }
-      seenIds.add(String(row.id));
-      return row;
-    });
+    let rowsToProcess = resolveRowIds(rows || [], { allowCrossPageSharedIds, externalIdSet: existingOtherIds });
 
     if (isUsingMongoDB) {
-      const pageConfig = await Page.findOne({ name });
-      const isTracker = pageConfig?.config?.linkedSourcePage;
-      const newRows = (isTracker || skipImageProcessing) ? rowsToProcess : await processRowsConcurrently(rowsToProcess, 50, forceSave);
+      const isTrackerDb = pageConfig?.linkedSourcePage; // Can use pageConfig here
+      const newRows = (isTrackerDb || skipImageProcessing) ? rowsToProcess : await processRowsConcurrently(rowsToProcess, 50, forceSave);
       
 
       const baseOrder = Date.now();
@@ -2062,36 +2065,41 @@ app.post('/api/pageRows/:name(*)/append', async (req, res) => {
     const { rows } = req.body;
     const forceSave = req.query.force === 'true';
 
+    let pageConfig: any = null;
+    if (isUsingMongoDB) {
+      const pageDoc = await Page.findOne({ name }).lean();
+      pageConfig = pageDoc?.config;
+    } else {
+      const db = await getLocalDB();
+      const p = db.pages.find((p: any) => p.name === name);
+      pageConfig = p?.config;
+    }
+
+    const isTracker = isTrackerPage(pageConfig);
+    const allowCrossPageSharedIds = isTracker;
+
     let existingOtherIds = new Set<string>();
     const incomingIds = (rows || []).map((r: any) => String(r.id)).filter((id: string) => id && id !== 'undefined' && id !== 'null');
     
-    if (isUsingMongoDB) {
-      if (incomingIds.length > 0) {
+    if (!allowCrossPageSharedIds && incomingIds.length > 0) {
+      if (isUsingMongoDB) {
         const matchingRows = await PageRow.find({ 'data.id': { $in: incomingIds } }, { 'data.id': 1, _id: 0 }).lean();
         matchingRows.forEach((r: any) => {
           if (r.data?.id) existingOtherIds.add(String(r.data.id));
         });
+      } else {
+        const db = await getLocalDB();
+        db.pages.forEach((p: any) => {
+          if (p.rows) {
+            p.rows.forEach((r: any) => {
+              if (r.id && incomingIds.includes(String(r.id))) existingOtherIds.add(String(r.id));
+            });
+          }
+        });
       }
-    } else {
-      const db = await getLocalDB();
-      db.pages.forEach((p: any) => {
-        if (p.rows) {
-          p.rows.forEach((r: any) => {
-            if (r.id && incomingIds.includes(String(r.id))) existingOtherIds.add(String(r.id));
-          });
-        }
-      });
     }
 
-    let rowsToProcess = rows || [];
-    const seenIds = new Set<string>(existingOtherIds);
-    rowsToProcess = rowsToProcess.map((row: any) => {
-      if (!row.id || seenIds.has(String(row.id))) {
-        row.id = uuidv4();
-      }
-      seenIds.add(String(row.id));
-      return row;
-    });
+    let rowsToProcess = resolveRowIds(rows || [], { allowCrossPageSharedIds, externalIdSet: existingOtherIds });
 
     const processedRows = await processRowsConcurrently(rowsToProcess, 50, forceSave);
 
