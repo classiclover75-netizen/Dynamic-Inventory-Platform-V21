@@ -1,3 +1,4 @@
+import { fetchFreshPageData } from "../lib/syncFetch";
 import { parseMultiSource } from "../lib/appUtils";
 import React from "react";
 import { PageConfig } from "../types";
@@ -42,14 +43,14 @@ export function useTrackerActions(deps: {
       if (!trackerConfig || !trackerConfig.linkedSourcePage) return;
 
       const sourcePage = trackerConfig.linkedSourcePage;
-      const loaded = await loadSourcePageIfNeeded(sourcePage);
+      const freshData = await fetchFreshPageData(sourcePage);
       
-      if (!loaded) {
-        toast("Sync blocked: source page is missing. Syncing now would erase this tracker's data. Re-import or recreate the source page first.");
+      if (!freshData || !Array.isArray(freshData.rows)) {
+        toast("Sync blocked: could not fetch the latest source page data. Check your connection and try again.");
         return;
       }
 
-      const sourceRows = loaded.rows || [];
+      const sourceRows = freshData.rows;
       const trackerRows = state.pageRows[trackerName] || [];
 
       if (sourceRows.length === 0 && trackerRows.length > 0) {
@@ -86,9 +87,10 @@ export function useTrackerActions(deps: {
       const response = await putRows(trackerName, repairedTrackerRows, true);
       if (!response.ok) throw new Error("Failed to sync to server");
 
-      setState((prev) => ({
+      setState((prev: any) => ({
         ...prev,
-        pageRows: { ...prev.pageRows, [trackerName]: repairedTrackerRows },
+        pageConfigs: { ...prev.pageConfigs, [sourcePage]: freshData.config },
+        pageRows: { ...prev.pageRows, [trackerName]: repairedTrackerRows, [sourcePage]: sourceRows },
       }));
 
       toast("Tracker synced successfully!");
