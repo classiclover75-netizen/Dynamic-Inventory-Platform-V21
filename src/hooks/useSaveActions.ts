@@ -1,5 +1,6 @@
 import { PageConfig, RowData } from "../types";
-import { savePageConfig, patchRow, appendPageRows, bulkPatchRows } from "../lib/api";
+import { savePageConfig, patchRow, appendPageRows, bulkPatchRows, putRows } from "../lib/api";
+import { validateReplacePayload } from "../lib/rowSaveMode";
 
 export function useSaveActions(deps: {
   state: any;
@@ -45,21 +46,39 @@ export function useSaveActions(deps: {
     newRows: RowData[],
     pageName?: string,
     force = false,
+    mode: "append" | "replace" = "append"
   ) => {
     const targetPage = pageName || state.activePage;
     let currentRows = [...(state.pageRows[targetPage] || [])];
 
-    if (editingRowId) {
-      const idx = currentRows.findIndex((r) => r.id === editingRowId);
-      if (idx >= 0) currentRows[idx] = newRows[0];
-      else currentRows.push(newRows[0]);
+    if (mode === "replace") {
+      const validation = validateReplacePayload(state.pageRows[targetPage], newRows);
+      if (!validation.ok) {
+        toast(`Save blocked: ${validation.reason}`);
+        return;
+      }
+      currentRows = newRows;
     } else {
-      currentRows.push(...newRows);
+      if (editingRowId) {
+        const idx = currentRows.findIndex((r) => r.id === editingRowId);
+        if (idx >= 0) currentRows[idx] = newRows[0];
+        else currentRows.push(newRows[0]);
+      } else {
+        currentRows.push(...newRows);
+      }
     }
 
     try {
       let response;
-      if (editingRowId && newRows.length === 1) {
+      if (mode === "replace") {
+        response = await putRows(targetPage, newRows, true);
+        if (response.ok) {
+          const finalRows = state.pageRows[targetPage] ? state.pageRows[targetPage].length : 0;
+          if (newRows.length > finalRows) {
+            console.error("Safety check failed: new rows count exceeds previous count.");
+          }
+        }
+      } else if (editingRowId && newRows.length === 1) {
         response = await patchRow(targetPage, editingRowId, newRows[0], force);
       } else {
         response = await appendPageRows(targetPage, newRows, force);
@@ -73,7 +92,7 @@ export function useSaveActions(deps: {
               isOpen: true,
               title: "Unsupported Image Format",
               message: data.error,
-              onConfirm: () => handleSaveRows(newRows, pageName, true),
+              onConfirm: () => handleSaveRows(newRows, pageName, true, mode),
             });
             return;
           }
@@ -98,7 +117,7 @@ export function useSaveActions(deps: {
         },
       }));
 
-      if (!editingRowId && !force) {
+      if (mode === "append" && !editingRowId && !force) {
         setPrimarySearchTags([]);
 
         setTimeout(() => {
@@ -147,7 +166,7 @@ export function useSaveActions(deps: {
 
             updatesObj[newRow.id] = trackerRows[tIdx];
             updatedTracker = true;
-          } else if (!wasEditing) {
+          } else if (!wasEditing && mode === "append") {
             const newTrackerRow = {
               ...newRow,
               total_qty: "0",
@@ -185,7 +204,9 @@ export function useSaveActions(deps: {
       }
 
       toast(
-        wasEditing
+        mode === "replace"
+          ? "Changes saved successfully."
+          : wasEditing
           ? "Row updated successfully"
           : `${newRows.length} row(s) added successfully!`,
       );

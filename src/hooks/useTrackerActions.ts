@@ -308,7 +308,7 @@ export function useTrackerActions(deps: {
       return newRow;
     });
 
-    await handleSaveRows(updatedRows, state.activePage, true);
+    await handleSaveRows(updatedRows, state.activePage, true, "replace");
     toast(
       `${colKeys.length} column(s) deleted successfully (${deleteType} mode).`,
     );
