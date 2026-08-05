@@ -1,0 +1,29 @@
+services:
+  db:
+    image: mongo:8
+    restart: always
+    volumes:
+      - mongo_data:/data/db
+  api:
+    build:
+      context: .
+      dockerfile: Dockerfile.api
+    restart: always
+    volumes:
+      - ./uploads:/app/uploads
+    environment:
+      - MONGODB_URI=mongodb://db:27017/inventory
+      - NODE_ENV=production
+    depends_on:
+      - db
+  inventory-app:
+    build:
+      context: .
+      dockerfile: Dockerfile.client
+    restart: always
+    ports:
+      - "80:80"
+    depends_on:
+      - api
+volumes:
+  mongo_data:
