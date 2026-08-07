@@ -9,22 +9,11 @@ export interface TrackerLinkStatusBannerProps {
 export function TrackerLinkStatusBanner({ health }: TrackerLinkStatusBannerProps) {
   const [detailsOpen, setDetailsOpen] = useState(false);
 
-  if (health.status === 'not_a_tracker' || health.status === 'loading') {
+  if (!health || health.status === 'not_a_tracker' || health.status === 'loading' || health.status === 'healthy') {
     return null;
   }
 
   const toggleDetails = () => setDetailsOpen(prev => !prev);
-
-  if (health.status === 'healthy') {
-    return (
-      <div className="w-full mb-2 bg-green-50 border border-green-200 rounded-md px-3 py-1.5 flex items-center gap-2">
-        <CheckCircle2 size={16} className="text-green-600 shrink-0" />
-        <div className="text-xs text-green-800 font-medium">
-          Linked to <strong>{health.sourcePageName}</strong> ({health.matchedRowCount} rows in sync)
-        </div>
-      </div>
-    );
-  }
 
   const isBroken = health.status === 'broken';
   const containerClass = isBroken

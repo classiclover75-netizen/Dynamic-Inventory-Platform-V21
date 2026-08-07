@@ -85,7 +85,7 @@ const initialConfig: PageConfig = {
     {
       key: "sr",
       name: "Row No.",
-      type: "system_serial",
+      type: "system_serial" as const,
       locked: true,
       movable: false,
     },
@@ -739,7 +739,7 @@ function AppContent() {
         {
           key: "sr",
           name: "Row No.",
-          type: "system_serial",
+          type: "system_serial" as const,
           locked: true,
           movable: false,
           width: state.globalRowNoWidth || 100,
@@ -2264,7 +2264,7 @@ function AppContent() {
         setIsDeletePageModalOpen={setIsDeletePageModalOpen}
       />
 
-      <PageTabsBar pages={state.pages} activePage={state.activePage} setState={setState} />
+      <PageTabsBar pages={state.pages} activePage={state.activePage} setState={setState} trackerLinkHealth={trackerLinkHealth} />
 
       {activeConfig.copyBoxConfig && activeConfig.showCopyBoxes !== false && (
         <GlobalCombinationCopyBoxes
