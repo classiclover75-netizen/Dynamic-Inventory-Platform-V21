@@ -630,19 +630,24 @@ function AppContent() {
       await Promise.allSettled(
         linkedTrackers.map(async (trackerName) => {
           const trackerRows = state.pageRows[trackerName] || [];
-          if (trackerRows.length === 0) return;
+          if (trackerRows.length > 0) {
+            const order = buildTrackerOrder(newRows, trackerRows);
+            if (order.length === 0) return;
 
-          const order = buildTrackerOrder(newRows, trackerRows);
-          if (order.length === 0) return;
+            await bulkPatchRows(trackerName, { order }, true);
 
-          await bulkPatchRows(trackerName, { order }, true);
+            const trackerRowMap = new Map(trackerRows.map(r => [String(r.id), r]));
+            const newTrackerRows = order
+              .map(idStr => trackerRowMap.get(idStr))
+              .filter((r): r is RowData => Boolean(r));
 
-          const trackerRowMap = new Map(trackerRows.map(r => [String(r.id), r]));
-          const newTrackerRows = order
-            .map(idStr => trackerRowMap.get(idStr))
-            .filter((r): r is RowData => Boolean(r));
-
-          trackerUpdates[trackerName] = newTrackerRows;
+            trackerUpdates[trackerName] = newTrackerRows;
+          } else {
+            const order = newRows.map(r => String(r.id || '')).filter(id => Boolean(id));
+            if (order.length === 0) return;
+            await bulkPatchRows(trackerName, { order }, true);
+            return;
+          }
         })
       );
 
