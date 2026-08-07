@@ -14,6 +14,8 @@ import AdmZip from 'adm-zip';
 import unzipper from 'unzipper';
 import multer from 'multer';
 import { getPartnerPageNames } from './src/server/trackerLinkGuard';
+import { connectDatabase, syncDatabaseParity, getStorageMode } from './src/server/dbConnection';
+
 
 const upload = multer({ dest: 'temp_uploads/' });
 
@@ -48,7 +50,14 @@ app.use(express.json({ limit: '100mb' }));
 app.use(express.urlencoded({ limit: '100mb', extended: true }));
 
 app.get('/api/health', (req, res) => {
-  res.json({ status: 'ok' });
+  const modeInfo = getStorageMode();
+  res.json({
+    status: 'ok',
+    storage: modeInfo.mode,
+    mongoConnected: isUsingMongoDB,
+    transactionsSupported: typeof transactionsSupported !== 'undefined' ? transactionsSupported : false,
+    connectedAt: modeInfo.connectedAt
+  });
 });
 
 app.get('/uploads/thumb/:filename', async (req, res, next) => {
@@ -93,47 +102,21 @@ app.use('/uploads', express.static(UPLOADS_DIR, {
   }
 }));
 
-// MongoDB Connection with Retry
 let isUsingMongoDB = false;
 
-const connectDB = async () => {
-  // 1. Clean the URI (remove extra quotes or spaces)
-  let rawUri = process.env.MONGODB_URI;
-  if (rawUri) {
-    rawUri = rawUri.replace(/^["']|["']$/g, '').trim();
+connectDatabase({
+  onConnected: async () => {
+    await syncDatabaseParity({
+      Page,
+      PageRow,
+      AppSettings,
+      getSortedPageRows,
+      localDbPath: LOCAL_DB_PATH
+    });
   }
-
-  // 2. Determine final URI
-  const uri = rawUri || (process.env.NODE_ENV === 'production' ? 'mongodb://db:27017/inventory' : '');
-
-  // 3. Fallback check for AI Studio / Local Preview
-  if (!uri || (!uri.startsWith('mongodb://') && !uri.startsWith('mongodb+srv://'))) {
-    console.warn('No valid MONGODB_URI found (Invalid scheme or empty). Using local file storage fallback for preview.');
-    return;
-  }
-
-  // 4. Connection Loop
-  const maxRetries = 3;
-  let retries = 0;
-
-  while (retries < maxRetries) {
-    try {
-      await mongoose.connect(uri, { serverSelectionTimeoutMS: 2000 });
-      console.log('Connected to MongoDB');
-      isUsingMongoDB = true;
-      await syncDatabaseParity();
-      return;
-    } catch (err: any) {
-      retries++;
-      console.error(`MongoDB connection attempt ${retries} failed. ${err.message}`);
-      if (retries < maxRetries) {
-        await new Promise(resolve => setTimeout(resolve, 2000));
-      }
-    }
-  }
-  console.warn('Could not connect to MongoDB after retries. Falling back to local file storage for preview.');
-};
-connectDB();
+}).then(result => {
+  isUsingMongoDB = result.usingMongoDB;
+}).catch(err => console.error("Database connection failed:", err));
 
 // Local Storage Fallback Logic
 const LOCAL_DB_PATH = path.join(process.cwd(), 'db.json');
@@ -153,74 +136,6 @@ async function saveLocalDB(data: any) {
   await fs.promises.rename(tmpPath, LOCAL_DB_PATH);
 }
 
-async function syncDatabaseParity() {
-  try {
-    const mongoPageCount = await Page.countDocuments();
-    const localExists = fs.existsSync(LOCAL_DB_PATH);
-    let localData = { pages: [], settings: {} } as any;
-    if (localExists) {
-      try {
-        const raw = await fs.promises.readFile(LOCAL_DB_PATH, 'utf-8');
-        localData = JSON.parse(raw);
-      } catch (e) {
-        // ignore
-      }
-    }
-
-    if (mongoPageCount === 0 && localData.pages && localData.pages.length > 0) {
-      console.log('MongoDB is empty but local db.json has pages. Syncing local to MongoDB...');
-      for (const localPage of localData.pages) {
-        await Page.create({ name: localPage.name, config: localPage.config || {} });
-        const rowsToInsert = (localPage.rows || []).map((row: any) => ({
-          pageName: localPage.name,
-          data: row
-        }));
-        if (rowsToInsert.length > 0) {
-          await PageRow.insertMany(rowsToInsert);
-        }
-      }
-      
-      if (localData.settings) {
-        await AppSettings.findOneAndUpdate({}, {
-          globalCopyBoxes: localData.settings.globalCopyBoxes,
-          globalRowNoWidth: localData.settings.globalRowNoWidth,
-          maxSearchHistory: localData.settings.maxSearchHistory,
-          sourceSuggestionsEnabled: localData.settings.sourceSuggestionsEnabled
-        }, { upsert: true });
-      }
-      console.log('Local to MongoDB sync complete.');
-    } else if (mongoPageCount > 0) {
-      console.log('MongoDB has data. Writing/updating a backup copy to local db.json to maintain consistency...');
-      const pages = await Page.find({});
-      const pageRows = await getSortedPageRows({});
-      const settings = await AppSettings.findOne({});
-      
-      const localPagesList = [];
-      for (const page of pages) {
-        const rowsForPage = pageRows.filter(r => r.pageName === page.name).map(r => r.data);
-        localPagesList.push({
-          name: page.name,
-          config: page.config,
-          rows: rowsForPage
-        });
-      }
-      
-      const newLocalDb = {
-        pages: localPagesList,
-        settings: settings ? {
-          globalCopyBoxes: settings.globalCopyBoxes,
-          globalRowNoWidth: settings.globalRowNoWidth,
-          maxSearchHistory: settings.maxSearchHistory,
-        sourceSuggestionsEnabled: settings.sourceSuggestionsEnabled
-        } : {}
-      };
-      await fs.promises.writeFile(LOCAL_DB_PATH, JSON.stringify(newLocalDb, null, 2));
-      console.log('MongoDB to local db.json backup complete.');
-    }
-  } catch (err) {
-    console.error('Failed to run database parity sync:', err);
-  }
-}
 
 let localBackupTimeout: NodeJS.Timeout | null = null;
 let isBackupRunning = false;
