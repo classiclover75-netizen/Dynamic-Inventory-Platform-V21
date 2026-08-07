@@ -13,7 +13,7 @@ import archiver from 'archiver';
 import AdmZip from 'adm-zip';
 import unzipper from 'unzipper';
 import multer from 'multer';
-import { isTrackerPage, isLinkedPage, resolveRowIds } from './src/server/trackerIdGuard';
+import { getPartnerPageNames } from './src/server/trackerLinkGuard';
 
 const upload = multer({ dest: 'temp_uploads/' });
 
@@ -1776,22 +1776,23 @@ app.put('/api/pageRows/:name(*)', async (req, res) => {
       pageConfig = allPageConfigs[name] || null;
     }
 
-    const isTracker = isTrackerPage(pageConfig);
-    const allowCrossPageSharedIds = isLinkedPage(name, pageConfig, allPageConfigs);
+    const partnerPages = getPartnerPageNames(name, pageConfig, allPageConfigs);
+    const partnerPagesSet = new Set(partnerPages);
 
     const incomingIds = (rows || []).map((r: any) => String(r.id)).filter((id: string) => id && id !== 'undefined' && id !== 'null');
     let existingOtherIds = new Set<string>();
     
-    if (!allowCrossPageSharedIds && incomingIds.length > 0) {
+    if (incomingIds.length > 0) {
       if (isUsingMongoDB) {
-        const otherRows = await PageRow.find({ pageName: { $ne: name }, 'data.id': { $in: incomingIds } }, { 'data.id': 1, _id: 0 }).lean();
+        const excludedPages = [name, ...partnerPages];
+        const otherRows = await PageRow.find({ pageName: { $nin: excludedPages }, 'data.id': { $in: incomingIds } }, { 'data.id': 1, _id: 0 }).lean();
         otherRows.forEach((r: any) => {
           if (r.data?.id) existingOtherIds.add(String(r.data.id));
         });
       } else {
         const db = await getLocalDB();
         db.pages.forEach((p: any) => {
-          if (p.name !== name && p.rows) {
+          if (p.name !== name && !partnerPagesSet.has(p.name) && p.rows) {
             p.rows.forEach((r: any) => {
               if (r.id && incomingIds.includes(String(r.id))) existingOtherIds.add(String(r.id));
             });
@@ -1800,7 +1801,25 @@ app.put('/api/pageRows/:name(*)', async (req, res) => {
       }
     }
 
-    let rowsToProcess = resolveRowIds(rows || [], { allowCrossPageSharedIds, externalIdSet: existingOtherIds });
+    let rowsToProcess = rows || [];
+    const seenIds = new Set<string>(existingOtherIds);
+    rowsToProcess = rowsToProcess.map((row: any) => {
+      const originalId = String(row.id);
+      const hasValidId = row.id && originalId !== 'undefined' && originalId !== 'null' && originalId.trim() !== '';
+      if (!hasValidId || seenIds.has(originalId)) {
+        row.id = uuidv4();
+      }
+      seenIds.add(String(row.id));
+      return row;
+    });
+
+    const finalIds = new Set<string>();
+    for (const r of rowsToProcess) {
+      if (finalIds.has(String(r.id))) {
+        throw new Error(`Safety Violation: duplicate ID ${r.id} generated or preserved in payload.`);
+      }
+      finalIds.add(String(r.id));
+    }
 
     if (isUsingMongoDB) {
       const isTrackerDb = pageConfig?.linkedSourcePage; // Can use pageConfig here
@@ -2079,22 +2098,22 @@ app.post('/api/pageRows/:name(*)/append', async (req, res) => {
       pageConfig = allPageConfigs[name] || null;
     }
 
-    const isTracker = isTrackerPage(pageConfig);
-    const allowCrossPageSharedIds = isLinkedPage(name, pageConfig, allPageConfigs);
+    const partnerPages = getPartnerPageNames(name, pageConfig, allPageConfigs);
+    const partnerPagesSet = new Set(partnerPages);
 
     let existingOtherIds = new Set<string>();
     const incomingIds = (rows || []).map((r: any) => String(r.id)).filter((id: string) => id && id !== 'undefined' && id !== 'null');
     
-    if (!allowCrossPageSharedIds && incomingIds.length > 0) {
+    if (incomingIds.length > 0) {
       if (isUsingMongoDB) {
-        const matchingRows = await PageRow.find({ 'data.id': { $in: incomingIds } }, { 'data.id': 1, _id: 0 }).lean();
+        const matchingRows = await PageRow.find({ pageName: { $nin: partnerPages }, 'data.id': { $in: incomingIds } }, { 'data.id': 1, _id: 0 }).lean();
         matchingRows.forEach((r: any) => {
           if (r.data?.id) existingOtherIds.add(String(r.data.id));
         });
       } else {
         const db = await getLocalDB();
         db.pages.forEach((p: any) => {
-          if (p.rows) {
+          if (!partnerPagesSet.has(p.name) && p.rows) {
             p.rows.forEach((r: any) => {
               if (r.id && incomingIds.includes(String(r.id))) existingOtherIds.add(String(r.id));
             });
@@ -2103,7 +2122,25 @@ app.post('/api/pageRows/:name(*)/append', async (req, res) => {
       }
     }
 
-    let rowsToProcess = resolveRowIds(rows || [], { allowCrossPageSharedIds, externalIdSet: existingOtherIds });
+    let rowsToProcess = rows || [];
+    const seenIds = new Set<string>(existingOtherIds);
+    rowsToProcess = rowsToProcess.map((row: any) => {
+      const originalId = String(row.id);
+      const hasValidId = row.id && originalId !== 'undefined' && originalId !== 'null' && originalId.trim() !== '';
+      if (!hasValidId || seenIds.has(originalId)) {
+        row.id = uuidv4();
+      }
+      seenIds.add(String(row.id));
+      return row;
+    });
+
+    const finalIds = new Set<string>();
+    for (const r of rowsToProcess) {
+      if (finalIds.has(String(r.id))) {
+        throw new Error(`Safety Violation: duplicate ID ${r.id} generated or preserved in payload.`);
+      }
+      finalIds.add(String(r.id));
+    }
 
     const processedRows = await processRowsConcurrently(rowsToProcess, 50, forceSave);
 
