@@ -37,6 +37,8 @@ import { BulkApplySourceModal } from "./components/BulkApplySourceModal";
 import { ActivePageSettingsModal } from "./components/ActivePageSettingsModal";
 import { ManageTrackerColumnsModal } from "./components/ManageTrackerColumnsModal";
 import { RelinkTrackerModal } from "./components/RelinkTrackerModal";
+import { TrackerLinkStatusBanner } from "./components/TrackerLinkStatusBanner";
+import { checkTrackerLinkHealth } from "./lib/trackerLinkHealth";
 import { RenamePageModal } from "./components/RenamePageModal";
 import { CreateColumnModal } from "./components/CreateColumnModal";
 import { EditColumnModal } from "./components/EditColumnModal";
@@ -2210,6 +2212,28 @@ function AppContent() {
     </div>
   );
 
+  const trackerLinkHealth = React.useMemo(() => {
+    try {
+      if (!state.activePage) {
+        return {
+          status: 'not_a_tracker',
+          sourcePageName: null,
+          sourcePageExists: false,
+          sourceRowCount: 0,
+          trackerRowCount: 0,
+          matchedRowCount: 0,
+          missingInTrackerCount: 0,
+          ghostRowCount: 0,
+          issues: []
+        } as any;
+      }
+      return checkTrackerLinkHealth(state.activePage, state.pageConfigs, state.pageRows);
+    } catch (e) {
+      console.error("Error computing tracker health:", e);
+      return { status: 'not_a_tracker', issues: [] } as any;
+    }
+  }, [state.activePage, state.pageConfigs, state.pageRows]);
+
   const isAnyModalOpen =
     Object.values(modals).some((v) => v) ||
     isDupModalOpen ||
@@ -2262,7 +2286,7 @@ function AppContent() {
         setSecondarySearchTags={setSecondarySearchTags}
         maxSearchHistory={maxSearchHistory}
       />
-
+      <TrackerLinkStatusBanner health={trackerLinkHealth} />
       <div className="flex-1 min-h-0 overflow-hidden border border-gray-400 rounded-md bg-white flex flex-col">
         {isLoading ? (
           <div className="flex-1 flex items-center justify-center text-[#2b579a] text-base font-bold text-center p-5 flex-col">
