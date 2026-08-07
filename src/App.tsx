@@ -2265,6 +2265,20 @@ function AppContent() {
     }
   }, [state.activePage, state.pageConfigs, state.pageRows, state.pages]);
 
+
+  const trackerLinkHealthByPage = React.useMemo(() => {
+    const map: Record<string, any> = {};
+    for (const page of state.pages) {
+      try {
+        map[page] = checkTrackerLinkHealth(page, state.pageConfigs, state.pageRows, state.pages);
+      } catch (e) {
+        console.error(`Error computing tracker health for ${page}:`, e);
+        map[page] = { status: 'not_a_tracker', issues: [] };
+      }
+    }
+    return map;
+  }, [state.pages, state.pageConfigs, state.pageRows]);
+
   const isAnyModalOpen =
     Object.values(modals).some((v) => v) ||
     isDupModalOpen ||
@@ -2293,7 +2307,7 @@ function AppContent() {
         setIsDeletePageModalOpen={setIsDeletePageModalOpen}
       />
 
-      <PageTabsBar pages={state.pages} activePage={state.activePage} setState={setState} trackerLinkHealth={trackerLinkHealth} />
+      <PageTabsBar pages={state.pages} activePage={state.activePage} setState={setState} healthByPage={trackerLinkHealthByPage} />
 
       {activeConfig.copyBoxConfig && activeConfig.showCopyBoxes !== false && (
         <GlobalCombinationCopyBoxes
