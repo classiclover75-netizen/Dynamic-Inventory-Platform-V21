@@ -64,6 +64,7 @@ import { useTableHover } from "./hooks/useTableHover";
 import { useSaveActions } from "./hooks/useSaveActions";
 import { useInlineEdit } from "./hooks/useInlineEdit";
 import { filterAndSortTrackerRows } from "./lib/trackerSortUtils";
+import { createPageSafe, renamePageSafe, deletePageSafe } from "./lib/pageMutations";
 import { TableView } from "./components/TableView";
 import { ColumnResizeHandle } from "./components/ColumnResizeHandle";
 import { CreateTrackerSelectionModal } from "./components/CreateTrackerSelectionModal";
@@ -748,11 +749,7 @@ function AppContent() {
     };
 
     try {
-      await fetch("/api/pages", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ name, config: newConfig }),
-      });
+      await createPageSafe(name, newConfig);
 
       setState((prev) => ({
         ...prev,
@@ -771,48 +768,52 @@ function AppContent() {
       toast(
         `Page "${name}" created. Added: Row No. + ${columns.length} custom column(s).`,
       );
-    } catch (err) {
+    } catch (err: any) {
       console.error(err);
-      toast("Failed to create page in database");
+      toast(err.message || "Failed to create page in database");
     }
   };
 
   const handleRenamePage = async (newName: string) => {
     const oldName = state.activePage;
+    const trimmedNewName = newName.trim();
+    if (!trimmedNewName) {
+      return;
+    }
+    if (state.pages.includes(trimmedNewName) && trimmedNewName !== oldName) {
+      toast("A page with this name already exists");
+      return;
+    }
     try {
-      await fetch(`/api/pages/${encodeURIComponent(oldName)}/rename`, {
-        method: "PUT",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ newName }),
-      });
+      await renamePageSafe(oldName, trimmedNewName);
 
       setState((prev) => {
-        const newPages = prev.pages.map((p) => (p === oldName ? newName : p));
+        const newPages = prev.pages.map((p) => (p === oldName ? trimmedNewName : p));
         const newConfigs = { ...prev.pageConfigs };
         const newRows = { ...prev.pageRows };
 
-        newConfigs[newName] = newConfigs[oldName];
+        newConfigs[trimmedNewName] = newConfigs[oldName];
         delete newConfigs[oldName];
 
-        newRows[newName] = newRows[oldName];
+        newRows[trimmedNewName] = newRows[oldName];
         delete newRows[oldName];
 
-        const syncedConfigs = renamePageRefs(newConfigs, oldName, newName);
+        const syncedConfigs = renamePageRefs(newConfigs, oldName, trimmedNewName);
 
         return {
           ...prev,
           pages: newPages,
-          activePage: newName,
+          activePage: trimmedNewName,
           pageConfigs: syncedConfigs,
           pageRows: newRows,
         };
       });
       closeAllModals();
       setReturnToSettings(false);
-      toast(`Page renamed to: ${newName}`);
-    } catch (err) {
+      toast(`Page renamed to: ${trimmedNewName}`);
+    } catch (err: any) {
       console.error(err);
-      toast("Failed to rename page in database");
+      toast(err.message || "Failed to rename page in database");
     }
   };
 
@@ -872,9 +873,7 @@ function AppContent() {
   const handleDeletePage = async () => {
     const pageToDelete = state.activePage;
     try {
-      await fetch(`/api/pages/${encodeURIComponent(pageToDelete)}`, {
-        method: "DELETE",
-      });
+      await deletePageSafe(pageToDelete);
 
       setState((prev) => {
         const linkedTrackers = Object.entries(prev.pageConfigs)
@@ -910,9 +909,9 @@ function AppContent() {
       });
       closeAllModals();
       toast(`Page "${pageToDelete}" deleted`);
-    } catch (err) {
+    } catch (err: any) {
       console.error(err);
-      toast("Failed to delete page from database");
+      toast(err.message || "Failed to delete page from database");
     }
   };
 

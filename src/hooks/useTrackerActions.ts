@@ -3,6 +3,7 @@ import { parseMultiSource } from "../lib/appUtils";
 import React from "react";
 import { PageConfig } from "../types";
 import { putRows, savePageConfig } from "../lib/api";
+import { createPageSafe, deletePageSafe } from "../lib/pageMutations";
 
 export function useTrackerActions(deps: {
   state: any;
@@ -173,14 +174,22 @@ export function useTrackerActions(deps: {
     });
 
     try {
-      await fetch("/api/pages", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ name: trackerName, config: newConfig }),
-      });
-      await putRows(trackerName, newRows, true);
+      await createPageSafe(trackerName, newConfig);
+      try {
+        const rowsResponse = await putRows(trackerName, newRows, true);
+        if (!rowsResponse.ok) {
+          throw new Error("Failed to write tracker rows");
+        }
+      } catch (rowErr) {
+        try {
+          await deletePageSafe(trackerName);
+        } catch (cleanupErr) {
+          console.error("Failed to clean up tracker page after row write failure:", cleanupErr);
+        }
+        throw rowErr;
+      }
 
-      setState((prev) => ({
+      setState((prev: any) => ({
         ...prev,
         pages: [...prev.pages, trackerName],
         activePage: trackerName,
@@ -188,9 +197,9 @@ export function useTrackerActions(deps: {
         pageRows: { ...prev.pageRows, [trackerName]: newRows },
       }));
       toast(`Tracker "${trackerName}" created with ALL columns!`);
-    } catch (err) {
+    } catch (err: any) {
       console.error(err);
-      toast("Failed to create tracker page");
+      toast(err.message || "Failed to create tracker page");
     }
   };
   const handleAddSaleColumn = async () => {
