@@ -1,6 +1,6 @@
 import { PageConfig, RowData } from "../types";
 
-export type TrackerLinkStatus = 'healthy' | 'out_of_sync' | 'broken' | 'not_a_tracker';
+export type TrackerLinkStatus = 'healthy' | 'out_of_sync' | 'broken' | 'not_a_tracker' | 'loading';
 
 export interface TrackerLinkHealth {
   status: TrackerLinkStatus;
@@ -17,7 +17,8 @@ export interface TrackerLinkHealth {
 export function checkTrackerLinkHealth(
   pageName: string,
   pageConfigs: Record<string, PageConfig | undefined>,
-  pageRows: Record<string, RowData[] | undefined>
+  pageRows: Record<string, RowData[] | undefined>,
+  pageNames?: string[]
 ): TrackerLinkHealth {
   const result: TrackerLinkHealth = {
     status: 'not_a_tracker',
@@ -31,25 +32,18 @@ export function checkTrackerLinkHealth(
     issues: [],
   };
 
+  const validPageNames = Array.isArray(pageNames) ? pageNames : [];
+
   try {
     const config = pageConfigs?.[pageName];
     if (!config) return result;
 
-    const isTrackerPage = !!config.isTrackerPage; // actually we check if it has linkedSourcePage based on instructions, but let's see. Wait, types.ts says isTrackerPage. Or linkedSourcePage.
-    // "1. If the page config is missing, or isTrackerPage is not true AND linkedSourcePage is empty or undefined, return status not_a_tracker with all counts 0 and empty issues."
-    
-    // Note: Actually, in this codebase, some trackers might not have isTrackerPage strictly set if it relies on linkedSourcePage. Let's check config.isTrackerPage. Wait, the instructions say:
-    // "1. If the page config is missing, or isTrackerPage is not true AND linkedSourcePage is empty or undefined, return status not_a_tracker with all counts 0 and empty issues."
-    
-    // Let's implement literally.
     const hasLinkedSourcePage = typeof config.linkedSourcePage === 'string' && config.linkedSourcePage.trim() !== '';
-    const isTrackerFlag = !!config.isTrackerPage || hasLinkedSourcePage; // Usually it's either. Actually, instruction says "isTrackerPage is not true AND linkedSourcePage is empty or undefined".
 
     if (!config.isTrackerPage && !hasLinkedSourcePage) {
       return result;
     }
 
-    // "2. If isTrackerPage is true but linkedSourcePage is missing, not a string, or empty/whitespace-only, return status broken with issue: This tracker has no linked source page."
     if (config.isTrackerPage && !hasLinkedSourcePage) {
       result.status = 'broken';
       result.issues.push("This tracker has no linked source page.");
@@ -59,7 +53,31 @@ export function checkTrackerLinkHealth(
     const sourcePageName = config.linkedSourcePage?.trim() || "";
     result.sourcePageName = sourcePageName;
 
-    // "3. If linkedSourcePage is set but pageConfigs does not contain that page, return status broken with sourcePageExists false and an issue naming the missing page."
+    if (!validPageNames.includes(sourcePageName)) {
+      result.status = 'broken';
+      result.sourcePageExists = false;
+      result.issues.push(`Source page "${sourcePageName}" could not be found.`);
+      return result;
+    }
+
+    if (!pageConfigs[sourcePageName]) {
+      result.status = 'loading';
+      result.sourcePageExists = true;
+      return result;
+    }
+
+    if (pageRows[sourcePageName] === undefined) {
+      result.status = 'loading';
+      result.sourcePageExists = true;
+      return result;
+    }
+
+    if (pageRows[pageName] === undefined) {
+      result.status = 'loading';
+      result.sourcePageExists = true;
+      return result;
+    }
+
     const sourceConfig = pageConfigs[sourcePageName];
     if (!sourceConfig) {
       result.status = 'broken';
@@ -70,22 +88,18 @@ export function checkTrackerLinkHealth(
 
     result.sourcePageExists = true;
 
-    // "4. If linkedSourcePage points at the tracker itself, return status broken with issue: Tracker is linked to itself."
     if (sourcePageName === pageName) {
       result.status = 'broken';
       result.issues.push("Tracker is linked to itself.");
       return result;
     }
 
-    // "5. If the source page exists but that source page's own config also has linkedSourcePage set (meaning the source is itself a tracker), return status broken with issue: Source page is itself a tracker, which creates an invalid link chain."
     if (typeof sourceConfig.linkedSourcePage === 'string' && sourceConfig.linkedSourcePage.trim() !== '') {
       result.status = 'broken';
       result.issues.push("Source page is itself a tracker, which creates an invalid link chain.");
       return result;
     }
 
-    // "6. If the source page is valid, compute row-level drift. Build a Set of String(row.id) from source rows and from tracker rows. Use Set and Map lookups only. The algorithm must be O(n) with no nested loops, because pages can hold thousands of rows."
-    
     const sourceRowsArray = pageRows?.[sourcePageName] || [];
     const trackerRowsArray = pageRows?.[pageName] || [];
 

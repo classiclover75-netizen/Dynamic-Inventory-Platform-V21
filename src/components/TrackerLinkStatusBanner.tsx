@@ -9,7 +9,7 @@ export interface TrackerLinkStatusBannerProps {
 export function TrackerLinkStatusBanner({ health }: TrackerLinkStatusBannerProps) {
   const [detailsOpen, setDetailsOpen] = useState(false);
 
-  if (health.status === 'not_a_tracker') {
+  if (health.status === 'not_a_tracker' || health.status === 'loading') {
     return null;
   }
 

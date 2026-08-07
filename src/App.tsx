@@ -59,6 +59,7 @@ import { PageTabsBar } from "./components/PageTabsBar";
 import { SearchBarsSection } from "./components/SearchBarsSection";
 import { useImportExport } from "./hooks/useImportExport";
 import { useTrackerActions } from "./hooks/useTrackerActions";
+import { useTrackerSourcePreload } from "./hooks/useTrackerSourcePreload";
 import { useTableHover } from "./hooks/useTableHover";
 import { useSaveActions } from "./hooks/useSaveActions";
 import { useInlineEdit } from "./hooks/useInlineEdit";
@@ -1126,6 +1127,8 @@ function AppContent() {
     handleSaveRows,
     loadSourcePageIfNeeded,
   });
+
+  useTrackerSourcePreload({ state, setState });
 
   const handleRelinkTrackerSuccess = async (trackerName: string, newSourcePage: string, newConfig: PageConfig) => {
     setState((prev) => ({
@@ -2227,12 +2230,12 @@ function AppContent() {
           issues: []
         } as any;
       }
-      return checkTrackerLinkHealth(state.activePage, state.pageConfigs, state.pageRows);
+      return checkTrackerLinkHealth(state.activePage, state.pageConfigs, state.pageRows, state.pages);
     } catch (e) {
       console.error("Error computing tracker health:", e);
       return { status: 'not_a_tracker', issues: [] } as any;
     }
-  }, [state.activePage, state.pageConfigs, state.pageRows]);
+  }, [state.activePage, state.pageConfigs, state.pageRows, state.pages]);
 
   const isAnyModalOpen =
     Object.values(modals).some((v) => v) ||
