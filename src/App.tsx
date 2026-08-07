@@ -64,6 +64,7 @@ import { useTableHover } from "./hooks/useTableHover";
 import { useSaveActions } from "./hooks/useSaveActions";
 import { useInlineEdit } from "./hooks/useInlineEdit";
 import { filterAndSortTrackerRows } from "./lib/trackerSortUtils";
+import { findLinkedTrackers, buildTrackerOrder } from "./lib/trackerOrderSync";
 import { createPageSafe, renamePageSafe, deletePageSafe } from "./lib/pageMutations";
 import { TableView } from "./components/TableView";
 import { ColumnResizeHandle } from "./components/ColumnResizeHandle";
@@ -623,11 +624,34 @@ function AppContent() {
     try {
       await bulkPatchRows(targetPage, { order: newRows.map(r => r.id) });
 
+      const linkedTrackers = findLinkedTrackers(targetPage, state.pageConfigs);
+      const trackerUpdates: Record<string, RowData[]> = {};
+
+      await Promise.allSettled(
+        linkedTrackers.map(async (trackerName) => {
+          const trackerRows = state.pageRows[trackerName] || [];
+          if (trackerRows.length === 0) return;
+
+          const order = buildTrackerOrder(newRows, trackerRows);
+          if (order.length === 0) return;
+
+          await bulkPatchRows(trackerName, { order }, true);
+
+          const trackerRowMap = new Map(trackerRows.map(r => [String(r.id), r]));
+          const newTrackerRows = order
+            .map(idStr => trackerRowMap.get(idStr))
+            .filter((r): r is RowData => Boolean(r));
+
+          trackerUpdates[trackerName] = newTrackerRows;
+        })
+      );
+
       setState((prev) => ({
         ...prev,
         pageRows: {
           ...prev.pageRows,
           [targetPage]: newRows,
+          ...trackerUpdates,
         },
       }));
     } catch (err) {
