@@ -13,6 +13,7 @@ export interface ManageTrackerColumnsModalProps {
   pageRows: Record<string, any[]>;
   activeConfig: PageConfig;
   onSave: (selectedColKeys: string[]) => Promise<void>;
+  onOpenRelinkTracker?: () => void;
 }
 
 export const ManageTrackerColumnsModal = React.memo(({
@@ -22,7 +23,8 @@ export const ManageTrackerColumnsModal = React.memo(({
   pageConfigs,
   pageRows,
   activeConfig,
-  onSave
+  onSave,
+  onOpenRelinkTracker
 }: ManageTrackerColumnsModalProps) => {
   const [searchQuery, setSearchQuery] = useState("");
   const deferredSearchQuery = useDeferredValue(searchQuery);
@@ -251,6 +253,13 @@ export const ManageTrackerColumnsModal = React.memo(({
             <span className="font-bold text-lg block mb-1">Source Page Not Found</span>
             The linked main page ("<span className="font-bold">{activeConfig.linkedSourcePage}</span>") could not be found. It may have been renamed or deleted. <br/><br/>
             Please restore or rename the source page back to match, or recreate this Live Tracker from the new page.
+            {onOpenRelinkTracker && (
+              <div className="mt-4">
+                <Button variant="outline" onClick={onOpenRelinkTracker} className="flex items-center gap-2">
+                  🔗 Re-link to another page
+                </Button>
+              </div>
+            )}
           </div>
         ) : (
           <>

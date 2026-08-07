@@ -30,7 +30,8 @@ export const ActivePageSettingsModal = React.memo(({
   existingPages,
   setConfirmationModal,
   pageRows,
-  pageConfigs
+  pageConfigs,
+  onOpenRelinkTracker
 }: {
   isOpen: boolean;
   onClose: () => void;
@@ -57,6 +58,7 @@ export const ActivePageSettingsModal = React.memo(({
   setConfirmationModal: (modal: { isOpen: boolean, title?: string, message?: string, onConfirm: () => void } | null) => void;
   pageRows: Record<string, any[]>;
   pageConfigs: Record<string, PageConfig>;
+  onOpenRelinkTracker?: () => void;
 }) => {
   const fileInputRef = useRef<HTMLInputElement>(null);
   const [rowReorder, setRowReorder] = useState(pageConfig?.rowReorderEnabled || false);
@@ -267,6 +269,19 @@ export const ActivePageSettingsModal = React.memo(({
           <div className="mt-2 text-[11px] text-[#78909c] leading-snug">
             Automatically reorder Live Tracker rows based on the total sale quantities.
           </div>
+        </div>
+      )}
+      {!!pageConfig?.linkedSourcePage && (
+        <div className="border border-gray-200 rounded-md p-2.5 bg-gray-50 mb-2.5 flex items-center justify-between gap-2.5">
+          <div>
+            <div className="text-[13px] text-[#37474f] font-bold">Source Page</div>
+            <div className="text-[11px] text-[#78909c] leading-snug mt-1">Currently linked to: <span className="font-semibold">{pageConfig.linkedSourcePage}</span></div>
+          </div>
+          {onOpenRelinkTracker && (
+            <Button variant="outline" className="text-xs py-1 px-2 shrink-0" onClick={onOpenRelinkTracker}>
+              Change source page
+            </Button>
+          )}
         </div>
       )}
       <div className="border border-gray-200 rounded-md p-2.5 bg-gray-50 mb-2.5">

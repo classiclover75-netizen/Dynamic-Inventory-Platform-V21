@@ -36,6 +36,7 @@ import { AddRowModal } from "./components/AddRowModal";
 import { BulkApplySourceModal } from "./components/BulkApplySourceModal";
 import { ActivePageSettingsModal } from "./components/ActivePageSettingsModal";
 import { ManageTrackerColumnsModal } from "./components/ManageTrackerColumnsModal";
+import { RelinkTrackerModal } from "./components/RelinkTrackerModal";
 import { RenamePageModal } from "./components/RenamePageModal";
 import { CreateColumnModal } from "./components/CreateColumnModal";
 import { EditColumnModal } from "./components/EditColumnModal";
@@ -516,6 +517,7 @@ function AppContent() {
     globalCopyBoxesSettings: false,
     manageTrackerColumns: false,
     bulkApplySource: false,
+    relinkTracker: false,
   });
 
   const [editingRowId, setEditingRowId] = useState<string | null>(null);
@@ -1121,6 +1123,17 @@ function AppContent() {
     handleSaveRows,
     loadSourcePageIfNeeded,
   });
+
+  const handleRelinkTrackerSuccess = async (newSourcePage: string, newConfig: PageConfig) => {
+    setState((prev) => ({
+      ...prev,
+      pageConfigs: {
+        ...prev.pageConfigs,
+        [state.activePage]: newConfig
+      }
+    }));
+    await handleSyncTracker(state.activePage);
+  };
 
   const handleApplySourceToAll = async (pageName: string, colKey: string, sourceName: string, sourceColor: string) => {
     setBulkApplyContext({ pageName, colKey, sourceName, sourceColor });
@@ -2375,7 +2388,6 @@ function AppContent() {
         getImageUrl={getImageUrl}
       />
 
-
       {modals.manageTrackerColumns && rawActiveConfig.linkedSourcePage && (
         <ManageTrackerColumnsModal
           isOpen={modals.manageTrackerColumns}
@@ -2391,9 +2403,13 @@ function AppContent() {
             await handleManageTrackerColumns(cols);
             closeAllModals();
           }}
+          onOpenRelinkTracker={() => {
+            toggleModal("manageTrackerColumns", false);
+            toggleModal("relinkTracker", true);
+          }}
         />
       )}
-
+      
       <ActivePageSettingsModal
         isOpen={modals.activePageSettings}
         onClose={closeAllModals}
@@ -2404,6 +2420,10 @@ function AppContent() {
         onSave={handleSaveActivePageSettings}
         onDeleteColumn={handleDeleteColumnOptions}
         onSyncTracker={handleSyncTracker}
+        onOpenRelinkTracker={() => {
+          toggleModal("activePageSettings", false);
+          toggleModal("relinkTracker", true);
+        }}
         onManageTrackerColumns={async () => {
           if (activeConfig.linkedSourcePage) {
             await loadSourcePageIfNeeded(activeConfig.linkedSourcePage);
