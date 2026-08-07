@@ -525,6 +525,7 @@ function AppContent() {
   const [editingColumn, setEditingColumn] = useState<Column | null>(null);
   const [isDeletePageModalOpen, setIsDeletePageModalOpen] = useState(false);
   const [bulkApplyContext, setBulkApplyContext] = useState<{pageName: string, colKey: string, sourceName: string, sourceColor: string} | null>(null);
+  const [pendingTrackerSync, setPendingTrackerSync] = useState<string | null>(null);
   const [confirmationModal, setConfirmationModal] = useState<{
     isOpen: boolean;
     title?: string;
@@ -1124,16 +1125,23 @@ function AppContent() {
     loadSourcePageIfNeeded,
   });
 
-  const handleRelinkTrackerSuccess = async (newSourcePage: string, newConfig: PageConfig) => {
+  const handleRelinkTrackerSuccess = async (trackerName: string, newSourcePage: string, newConfig: PageConfig) => {
     setState((prev) => ({
       ...prev,
       pageConfigs: {
         ...prev.pageConfigs,
-        [state.activePage]: newConfig
+        [trackerName]: newConfig
       }
     }));
-    await handleSyncTracker(state.activePage);
+    setPendingTrackerSync(trackerName);
   };
+
+  useEffect(() => {
+    if (pendingTrackerSync) {
+      handleSyncTracker(pendingTrackerSync);
+      setPendingTrackerSync(null);
+    }
+  }, [pendingTrackerSync, handleSyncTracker]);
 
   const handleApplySourceToAll = async (pageName: string, colKey: string, sourceName: string, sourceColor: string) => {
     setBulkApplyContext({ pageName, colKey, sourceName, sourceColor });
@@ -2486,6 +2494,17 @@ function AppContent() {
           toggleModal("globalCopyBoxesSettings", true);
         }}
       />
+
+      {modals.relinkTracker && rawActiveConfig.linkedSourcePage && (
+        <RelinkTrackerModal
+          isOpen={modals.relinkTracker}
+          onClose={closeAllModals}
+          trackerName={state.activePage}
+          trackerConfig={rawActiveConfig}
+          pageConfigs={state.pageConfigs}
+          onRelinkSuccess={handleRelinkTrackerSuccess}
+        />
+      )}
 
       <CreateTrackerSelectionModal
         isOpen={!!trackerSelectionModalSource}

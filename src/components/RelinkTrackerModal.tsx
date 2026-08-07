@@ -11,7 +11,7 @@ export interface RelinkTrackerModalProps {
   trackerName: string;
   trackerConfig: PageConfig;
   pageConfigs: Record<string, PageConfig>;
-  onRelinkSuccess: (newSourcePage: string, newConfig: PageConfig) => Promise<void>;
+  onRelinkSuccess: (trackerName: string, newSourcePage: string, newConfig: PageConfig) => Promise<void>;
 }
 
 export function RelinkTrackerModal({
@@ -54,7 +54,7 @@ export function RelinkTrackerModal({
         throw new Error("Failed to save tracker configuration");
       }
 
-      await onRelinkSuccess(selectedSource, newConfig);
+      await onRelinkSuccess(trackerName, selectedSource, newConfig);
       toast("Tracker re-linked successfully!");
       onClose();
     } catch (err: any) {
