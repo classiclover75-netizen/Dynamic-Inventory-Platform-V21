@@ -900,7 +900,7 @@ function AppContent() {
   };
 
 
-  const handleDeletePage = async (pageName?: string, requireExtraWarning?: boolean) => {
+  const handleDeletePage = async (pageName?: string, extraConfirmationSteps: number = 1) => {
     const pageToDelete = pageName || state.activePage;
     
     const performDeletion = async () => {
@@ -952,19 +952,36 @@ function AppContent() {
       }
     };
 
-    const finalWarning = () => {
-      if (requireExtraWarning) {
+    const triggerExtraStep = (currentStep: number) => {
+      if (currentStep > extraConfirmationSteps) {
+        performDeletion();
+        return;
+      }
+
+      if (currentStep === extraConfirmationSteps) {
+        // FINAL
         setConfirmationModal({
           isOpen: true,
           title: 'Final Warning',
-          message: `Page "${pageToDelete}" and all its data will be permanently erased.`,
+          message: `Final confirmation. ${pageToDelete} and everything listed above will be deleted permanently. Images that are not used by any other row will also be deleted from disk. This cannot be recovered without a backup.`,
+          confirmLabel: 'PERMANENTLY DELETE',
           onConfirm: () => {
             setConfirmationModal({ isOpen: false, title: '', message: '', onConfirm: () => {} });
-            performDeletion();
+            triggerExtraStep(currentStep + 1);
           }
         });
       } else {
-        performDeletion();
+        // MIDDLE
+        setConfirmationModal({
+          isOpen: true,
+          title: 'Additional Warning',
+          message: `Second confirmation. Deleting ${pageToDelete} removes its rows and its tracker links from this database. This action cannot be undone and there is no recycle bin. Do you still want to continue?`,
+          confirmLabel: 'Yes, I understand',
+          onConfirm: () => {
+            setConfirmationModal({ isOpen: false, title: '', message: '', onConfirm: () => {} });
+            triggerExtraStep(currentStep + 1);
+          }
+        });
       }
     };
 
@@ -980,7 +997,7 @@ function AppContent() {
           message: `Deleting this page will also permanently delete the linked tracker pages: ${data.linkedPages.join(', ')}. A total of ${data.linkedRowCount + data.rowCount} rows will be removed across all of them. This action cannot be undone.`,
           onConfirm: () => {
             setConfirmationModal({ isOpen: false, title: '', message: '', onConfirm: () => {} });
-            finalWarning();
+            triggerExtraStep(1);
           }
         });
       } else {
@@ -990,7 +1007,7 @@ function AppContent() {
           message: `Deleting page "${pageToDelete}" will remove ${data.rowCount} rows. This action cannot be undone.`,
           onConfirm: () => {
             setConfirmationModal({ isOpen: false, title: '', message: '', onConfirm: () => {} });
-            finalWarning();
+            triggerExtraStep(1);
           }
         });
       }
@@ -1002,7 +1019,7 @@ function AppContent() {
         message: `Deleting page "${pageToDelete}". This action cannot be undone.`,
         onConfirm: () => {
           setConfirmationModal({ isOpen: false, title: '', message: '', onConfirm: () => {} });
-          finalWarning();
+          triggerExtraStep(1);
         }
       });
     }

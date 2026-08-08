@@ -34,7 +34,7 @@ export const DeletePageModal = ({
     }
     
     onClose();
-    onDeletePage(pageName, true);
+    onDeletePage(pageName, 2);
   };
 
   return (
