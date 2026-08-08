@@ -55,7 +55,7 @@ app.get('/api/health', (req, res) => {
     status: 'ok',
     storage: modeInfo.mode,
     mongoConnected: isUsingMongoDB,
-    transactionsSupported: typeof transactionsSupported !== 'undefined' ? transactionsSupported : false,
+    transactionsSupported: transactionsSupported || false,
     connectedAt: modeInfo.connectedAt
   });
 });
@@ -105,6 +105,9 @@ app.use('/uploads', express.static(UPLOADS_DIR, {
 let isUsingMongoDB = false;
 
 connectDatabase({
+  onConnectionEstablished: () => {
+    isUsingMongoDB = true;
+  },
   onConnected: async () => {
     await syncDatabaseParity({
       Page,

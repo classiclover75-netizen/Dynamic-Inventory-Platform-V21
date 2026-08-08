@@ -11,7 +11,7 @@ export function getStorageMode() {
   };
 }
 
-export async function connectDatabase(options?: { onConnected?: () => Promise<void> }): Promise<{ usingMongoDB: boolean, reason: string | null, mode: 'mongodb' | 'local-file' }> {
+export async function connectDatabase(options?: { onConnected?: () => Promise<void>, onConnectionEstablished?: () => void }): Promise<{ usingMongoDB: boolean, reason: string | null, mode: 'mongodb' | 'local-file' }> {
   // 1. Clean the URI (remove extra quotes or spaces)
   let rawUri = process.env.MONGODB_URI;
   if (rawUri) {
@@ -40,6 +40,14 @@ export async function connectDatabase(options?: { onConnected?: () => Promise<vo
       
       currentMode = 'mongodb';
       connectedAtTime = new Date().toISOString();
+      
+      if (options?.onConnectionEstablished) {
+        try {
+          options.onConnectionEstablished();
+        } catch (err) {
+          console.error('Error in onConnectionEstablished:', err);
+        }
+      }
       
       if (options?.onConnected) {
         await options.onConnected();
