@@ -965,10 +965,7 @@ function AppContent() {
           title: 'Final Warning',
           message: `Final confirmation. ${pageToDelete} and everything listed above will be deleted permanently. Images that are not used by any other row will also be deleted from disk. This cannot be recovered without a backup.`,
           confirmLabel: 'PERMANENTLY DELETE',
-          onConfirm: () => {
-            setConfirmationModal({ isOpen: false, title: '', message: '', onConfirm: () => {} });
-            triggerExtraStep(currentStep + 1);
-          }
+          onConfirm: () => { setTimeout(() => triggerExtraStep(currentStep + 1), 0); }
         });
       } else {
         // MIDDLE
@@ -977,10 +974,7 @@ function AppContent() {
           title: 'Additional Warning',
           message: `Second confirmation. Deleting ${pageToDelete} removes its rows and its tracker links from this database. This action cannot be undone and there is no recycle bin. Do you still want to continue?`,
           confirmLabel: 'Yes, I understand',
-          onConfirm: () => {
-            setConfirmationModal({ isOpen: false, title: '', message: '', onConfirm: () => {} });
-            triggerExtraStep(currentStep + 1);
-          }
+          onConfirm: () => { setTimeout(() => triggerExtraStep(currentStep + 1), 0); }
         });
       }
     };
@@ -995,20 +989,14 @@ function AppContent() {
           isOpen: true,
           title: 'Confirm Deletion',
           message: `Deleting this page will also permanently delete the linked tracker pages: ${data.linkedPages.join(', ')}. A total of ${data.linkedRowCount + data.rowCount} rows will be removed across all of them. This action cannot be undone.`,
-          onConfirm: () => {
-            setConfirmationModal({ isOpen: false, title: '', message: '', onConfirm: () => {} });
-            triggerExtraStep(1);
-          }
+          onConfirm: () => { setTimeout(() => triggerExtraStep(1), 0); }
         });
       } else {
         setConfirmationModal({
           isOpen: true,
           title: 'Confirm Deletion',
           message: `Deleting page "${pageToDelete}" will remove ${data.rowCount} rows. This action cannot be undone.`,
-          onConfirm: () => {
-            setConfirmationModal({ isOpen: false, title: '', message: '', onConfirm: () => {} });
-            triggerExtraStep(1);
-          }
+          onConfirm: () => { setTimeout(() => triggerExtraStep(1), 0); }
         });
       }
     } catch (e) {
@@ -1017,10 +1005,7 @@ function AppContent() {
         isOpen: true,
         title: 'Confirm Deletion',
         message: `Deleting page "${pageToDelete}". This action cannot be undone.`,
-        onConfirm: () => {
-          setConfirmationModal({ isOpen: false, title: '', message: '', onConfirm: () => {} });
-          triggerExtraStep(1);
-        }
+        onConfirm: () => { setTimeout(() => triggerExtraStep(1), 0); }
       });
     }
   };
