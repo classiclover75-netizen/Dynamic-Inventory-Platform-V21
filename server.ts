@@ -2090,9 +2090,29 @@ app.put('/api/pageRows/:name(*)', async (req, res) => {
   try {
     let rowsVersion = 0;
     const { name } = req.params;
-    const { rows } = req.body;
+    const { rows, expectedVersion } = req.body;
     const forceSave = req.query.force === 'true';
     const skipImageProcessing = req.query.skipImageProcessing === 'true';
+
+    if (expectedVersion !== undefined && expectedVersion !== null) {
+      if (!Number.isInteger(expectedVersion) || expectedVersion < 0) {
+        return res.status(400).json({ error: "Invalid expected version." });
+      }
+      if (isUsingMongoDB) {
+        const pageDoc = await Page.findOne({ name }, { rowsVersion: 1 }).lean();
+        if (pageDoc) {
+          const currentVersion = (pageDoc as any).rowsVersion || 0;
+          if (currentVersion !== expectedVersion) {
+            return res.status(409).json({
+              error: "This page was changed by someone else. Please reload the page before saving.",
+              conflict: true,
+              currentVersion,
+              expectedVersion
+            });
+          }
+        }
+      }
+    }
     
     let pageConfig: any = null;
     let allPageConfigs: Record<string, any> = {};
