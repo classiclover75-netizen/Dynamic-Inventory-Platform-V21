@@ -37,6 +37,7 @@ import { BulkApplySourceModal } from "./components/BulkApplySourceModal";
 import { ActivePageSettingsModal } from "./components/ActivePageSettingsModal";
 import { ManageTrackerColumnsModal } from "./components/ManageTrackerColumnsModal";
 import { RelinkTrackerModal } from "./components/RelinkTrackerModal";
+import { StorageModeBanner } from './components/StorageModeBanner';
 import { TrackerLinkStatusBanner } from "./components/TrackerLinkStatusBanner";
 import { checkTrackerLinkHealth } from "./lib/trackerLinkHealth";
 import { RenamePageModal } from "./components/RenamePageModal";
@@ -2331,6 +2332,7 @@ function AppContent() {
         setSecondarySearchTags={setSecondarySearchTags}
         maxSearchHistory={maxSearchHistory}
       />
+      <StorageModeBanner />
       <TrackerLinkStatusBanner health={trackerLinkHealth} />
       <div className="flex-1 min-h-0 overflow-hidden border border-gray-400 rounded-md bg-white flex flex-col">
         {isLoading ? (
