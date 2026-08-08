@@ -1,4 +1,5 @@
 import { RetiredSourcesOverviewModal } from "./components/RetiredSourcesOverviewModal";
+import { setPageVersion } from './lib/pageVersion';
 import { ActiveSourcesOverviewModal } from "./components/ActiveSourcesOverviewModal";
 import React, { useState, useMemo, useEffect, useRef, useCallback, useDeferredValue } from "react";
 
@@ -254,6 +255,7 @@ function AppContent() {
       const res = await fetch(`/api/pages/${encodeURIComponent(pageName)}`);
       let data: any = {}; try { data = await res.json(); } catch(e) {}
       if (data && !data.error) {
+        setPageVersion(data.name, data.rowsVersion);
         setState((prev) => ({
           ...prev,
           pageConfigs: {
@@ -299,6 +301,7 @@ function AppContent() {
         const res = await fetch(`/api/pages/${encodeURIComponent(pageName)}`);
         let data: any = {}; try { data = await res.json(); } catch(e) {}
         if (data && !data.error) {
+          setPageVersion(data.name, data.rowsVersion);
           setState((prev) => ({
             ...prev,
             pageConfigs: {
