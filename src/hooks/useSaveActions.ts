@@ -104,6 +104,14 @@ export function useSaveActions(deps: {
           toggleModal("addRow", false);
           setEditingRowId(null);
           return;
+        } else if (response.status === 409) {
+          toast("Someone else changed this page while you were editing. Your change was not saved to avoid overwriting their work. The page has been refreshed, please redo your change.");
+          if (refetchAndHydrateState) {
+            await refetchAndHydrateState();
+          }
+          toggleModal("addRow", false);
+          setEditingRowId(null);
+          return;
         }
         throw new Error("Database failed to save");
       }

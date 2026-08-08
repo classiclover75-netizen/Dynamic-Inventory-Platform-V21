@@ -1,4 +1,4 @@
-import { setPageVersion } from './pageVersion';
+import { setPageVersion, getPageVersion } from './pageVersion';
 
 export async function savePageConfig(pageName: string, config: any) {
   return fetch(`/api/pageConfigs/${encodeURIComponent(pageName)}`, {
@@ -24,10 +24,15 @@ export async function deleteRow(pageName: string, rowId: any) {
   return res;
 }
 export async function putRows(pageName: string, rows: any[], skipImageProcessing = false) {
+  const expectedVersion = getPageVersion(pageName);
+  const reqBody = (expectedVersion !== undefined && Number.isInteger(expectedVersion)) 
+    ? { rows, expectedVersion } 
+    : { rows };
+  
   const res = await fetch(`/api/pageRows/${encodeURIComponent(pageName)}${skipImageProcessing ? "?skipImageProcessing=true" : ""}`, {
     method: "PUT",
     headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ rows }),
+    body: JSON.stringify(reqBody),
   });
   try { const data = await res.clone().json(); if (data.success && Number.isInteger(data.rowsVersion)) { setPageVersion(pageName, data.rowsVersion); } } catch(e) {}
   return res;
