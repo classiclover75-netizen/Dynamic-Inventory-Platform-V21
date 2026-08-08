@@ -900,8 +900,8 @@ function AppContent() {
   };
 
 
-  const handleDeletePage = async () => {
-    const pageToDelete = state.activePage;
+  const handleDeletePage = async (pageName?: string, requireExtraWarning?: boolean) => {
+    const pageToDelete = pageName || state.activePage;
     
     const performDeletion = async () => {
       try {
@@ -931,10 +931,15 @@ function AppContent() {
           const deletedNames = [pageToDelete, ...linkedTrackers];
           const syncedConfigs = cleanDeletedPageRefs(newConfigs, deletedNames);
 
+          let nextActivePage = prev.activePage;
+          if (pageToDelete === prev.activePage || linkedTrackers.includes(prev.activePage)) {
+            nextActivePage = newPages.length > 0 ? newPages[0] : "";
+          }
+
           return {
             ...prev,
             pages: newPages,
-            activePage: newPages.length > 0 ? newPages[0] : "",
+            activePage: nextActivePage,
             pageConfigs: syncedConfigs,
             pageRows: newRows,
           };
@@ -947,10 +952,27 @@ function AppContent() {
       }
     };
 
+    const finalWarning = () => {
+      if (requireExtraWarning) {
+        setConfirmationModal({
+          isOpen: true,
+          title: 'Final Warning',
+          message: `Page "${pageToDelete}" and all its data will be permanently erased.`,
+          onConfirm: () => {
+            setConfirmationModal({ isOpen: false, title: '', message: '', onConfirm: () => {} });
+            performDeletion();
+          }
+        });
+      } else {
+        performDeletion();
+      }
+    };
+
     try {
       const res = await fetch(`/api/pages/delete-impact?name=${encodeURIComponent(pageToDelete)}`);
       if (!res.ok) throw new Error('Impact check failed');
       const data = await res.json();
+      
       if (data.linkedPages && data.linkedPages.length > 0) {
         setConfirmationModal({
           isOpen: true,
@@ -958,16 +980,32 @@ function AppContent() {
           message: `Deleting this page will also permanently delete the linked tracker pages: ${data.linkedPages.join(', ')}. A total of ${data.linkedRowCount + data.rowCount} rows will be removed across all of them. This action cannot be undone.`,
           onConfirm: () => {
             setConfirmationModal({ isOpen: false, title: '', message: '', onConfirm: () => {} });
-            performDeletion();
+            finalWarning();
           }
         });
-        return;
+      } else {
+        setConfirmationModal({
+          isOpen: true,
+          title: 'Confirm Deletion',
+          message: `Deleting page "${pageToDelete}" will remove ${data.rowCount} rows. This action cannot be undone.`,
+          onConfirm: () => {
+            setConfirmationModal({ isOpen: false, title: '', message: '', onConfirm: () => {} });
+            finalWarning();
+          }
+        });
       }
     } catch (e) {
       console.error('Failed to fetch delete impact', e);
+      setConfirmationModal({
+        isOpen: true,
+        title: 'Confirm Deletion',
+        message: `Deleting page "${pageToDelete}". This action cannot be undone.`,
+        onConfirm: () => {
+          setConfirmationModal({ isOpen: false, title: '', message: '', onConfirm: () => {} });
+          finalWarning();
+        }
+      });
     }
-    
-    performDeletion();
   };
 
   const handleClearPageData = async (pageName: string) => {
@@ -2705,6 +2743,7 @@ function AppContent() {
         state={state}
         setState={setState}
         setConfirmationModal={setConfirmationModal}
+        onDeletePage={handleDeletePage}
       />
 
       <ConfirmationModal

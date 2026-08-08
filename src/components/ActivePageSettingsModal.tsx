@@ -449,23 +449,8 @@ export const ActivePageSettingsModal = React.memo(({
           <div className="flex gap-2 mb-2">
             <Button variant="dark" className="flex-1 justify-center" onClick={onRenamePage}><Edit size={14} /> Rename Page</Button>
             <Button variant="red" className="flex-1 justify-center" onClick={() => {
-              const linkedTrackers = Object.entries(pageConfigs)
-                .filter(([_, conf]: [string, any]) => conf.linkedSourcePage === activePage)
-                .map(([name]) => name);
-
-              const message = linkedTrackers.length > 0
-                ? `Are you sure you want to delete "${activePage}"? This will ALSO permanently delete its ${linkedTrackers.length} linked tracker page(s) (${linkedTrackers.join(', ')}). This cannot be undone.`
-                : `Are you sure you want to delete "${activePage}"? This cannot be undone.`;
-
-              setConfirmationModal({
-                isOpen: true,
-                title: "Confirm Page Deletion",
-                message,
-                onConfirm: () => {
-                  onDeletePage();
-                  onClose();
-                }
-              });
+              onClose();
+              onDeletePage();
             }}><Trash2 size={14} /> Delete Page</Button>
           </div>
         )}

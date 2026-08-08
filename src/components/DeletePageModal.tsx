@@ -8,6 +8,7 @@ export const DeletePageModal = ({
   state,
   setState,
   setConfirmationModal,
+  onDeletePage,
 }: any) => {
   const [searchQuery, setSearchQuery] = useState("");
   const { toast } = useToast();
@@ -31,78 +32,9 @@ export const DeletePageModal = ({
       });
       return;
     }
-
-    setConfirmationModal({
-      isOpen: true,
-      title: `Delete Page: ${pageName}`,
-      message: `Are you sure you want to delete the page "${pageName}"? This action is permanent and will also delete any linked trackers.`,
-      confirmLabel: "Yes, delete",
-      onConfirm: () => {
-        setTimeout(() => {
-          setConfirmationModal({
-            isOpen: true,
-            title: `Final Warning: ${pageName}`,
-            message: `This is your last chance. "${pageName}" and ALL its data will be completely erased.`,
-            confirmLabel: "PERMANENTLY DELETE",
-            onConfirm: async () => {
-            try {
-              const res = await fetch(`/api/pages/${encodeURIComponent(pageName)}`, {
-                method: "DELETE",
-              });
-              let data: any = {}; try { data = await res.json(); } catch(e) {}
-              if (!data.success) {
-                toast(`❌ Failed to delete page: ${data.error}`);
-                console.error(data.error);
-                return;
-              }
-              toast(`✅ Page "${pageName}" deleted successfully!`);
-            } catch (err: any) {
-              toast(`❌ Network error while deleting page: ${err.message}`);
-              console.error(err);
-              return;
-            }
-
-            setState((prev: any) => {
-              const newConfigs = { ...prev.pageConfigs };
-              const newRows = { ...prev.pageRows };
-              
-              // find linked trackers
-              const linkedPages = Object.keys(newConfigs).filter(
-                (p) => newConfigs[p].linkedSourcePage === pageName
-              );
-
-              delete newConfigs[pageName];
-              delete newRows[pageName];
-              
-              linkedPages.forEach((p) => {
-                delete newConfigs[p];
-                delete newRows[p];
-              });
-
-              // Pick a new active page if necessary
-              let newActivePage = prev.activePage;
-              if (newActivePage === pageName || linkedPages.includes(newActivePage)) {
-                newActivePage = Object.keys(newConfigs)[0] || "";
-              }
-
-              const newPagesList = prev.pages 
-                ? prev.pages.filter((p: string) => p !== pageName && !linkedPages.includes(p)) 
-                : Object.keys(newConfigs);
-
-              return {
-                ...prev,
-                pageConfigs: newConfigs,
-                pageRows: newRows,
-                pages: newPagesList,
-                activePage: newActivePage
-              };
-            });
-            onClose();
-          }
-        });
-        }, 0);
-      }
-    });
+    
+    onClose();
+    onDeletePage(pageName, true);
   };
 
   return (
