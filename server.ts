@@ -140,12 +140,17 @@ app.get('/api/image-usage', async (req, res) => {
     };
 
     if (isUsingMongoDB) {
-      const pages = await Page.find({}, { name: 1 }).lean();
-      for (const p of pages) {
-        const sortedRows = await getSortedPageRows(p.name);
-        sortedRows.forEach((row: any, index: number) => {
-          checkRow(row.data, p.name, index + 1);
-        });
+      const sortedRows = await getSortedPageRows({});
+      let currentPageName = null;
+      let rowNumber = 0;
+      for (const row of sortedRows) {
+        if (row.pageName !== currentPageName) {
+          currentPageName = row.pageName;
+          rowNumber = 1;
+        } else {
+          rowNumber++;
+        }
+        checkRow(row.data, row.pageName, rowNumber);
       }
     } else {
       const db = await getLocalDB();
