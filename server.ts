@@ -24,6 +24,47 @@ const upload = multer({
   }
 });
 
+function cleanupTempFiles(files: any) {
+  if (!Array.isArray(files)) return;
+  for (const entry of files) {
+    if (entry === null || entry === undefined) continue;
+    let targetPath: string | undefined;
+    if (typeof entry === 'string') {
+      targetPath = entry;
+    } else if (typeof entry === 'object' && typeof entry.path === 'string') {
+      targetPath = entry.path;
+    }
+    if (targetPath && fs.existsSync(targetPath)) {
+      try {
+        fs.unlinkSync(targetPath);
+      } catch (e) {
+      }
+    }
+  }
+}
+
+function purgeTempUploadsOnStartup() {
+  try {
+    const tempDir = path.join(process.cwd(), 'temp_uploads');
+    if (!fs.existsSync(tempDir)) return;
+    const entries = fs.readdirSync(tempDir, { withFileTypes: true });
+    let removed = 0;
+    for (const entry of entries) {
+      if (entry.isFile()) {
+        try {
+          fs.unlinkSync(path.join(tempDir, entry.name));
+          removed++;
+        } catch (e) {
+        }
+      }
+    }
+    if (removed > 0) {
+      console.log(`Removed ${removed} leftover temp upload files.`);
+    }
+  } catch (e) {
+  }
+}
+
 const app = express();
 const PORT = (() => {
   const envPort = process.env.PORT;
@@ -753,6 +794,7 @@ app.post('/api/upload-excel-images', upload.array('images', 2000), async (req, r
 
     res.json({ success: true, paths: uploadedPaths });
   } catch (err: any) {
+    cleanupTempFiles(req.files as Express.Multer.File[]);
     console.error('Failed to upload excel images:', err);
     res.status(500).json({ error: err.message || 'Failed to upload images' });
   }
@@ -789,6 +831,7 @@ app.post('/api/upload-excel-media-bulk', upload.single('file'), async (req, res)
 
     res.json({ success: true, mediaMap });
   } catch (err: any) {
+    cleanupTempFiles([req.file]);
     console.error('Failed to extract media bulk:', err);
     res.status(500).json({ error: err.message || 'Failed to extract media' });
   }
@@ -3322,6 +3365,7 @@ app.post('/api/import-zip', upload.single('backup'), async (req, res) => {
 
 // Vite Middleware for Development
 async function startServer() {
+  purgeTempUploadsOnStartup();
   app.use((err: any, req: express.Request, res: express.Response, next: express.NextFunction) => {
     if (err instanceof multer.MulterError) {
       console.error('Multer error:', err);
