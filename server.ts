@@ -19,7 +19,16 @@ import { connectDatabase, syncDatabaseParity, getStorageMode } from './src/serve
 const upload = multer({ dest: 'temp_uploads/' });
 
 const app = express();
-const PORT = 3000;
+const PORT = (() => {
+  const envPort = process.env.PORT;
+  if (envPort && envPort !== '') {
+    const num = Number(envPort);
+    if (Number.isInteger(num) && num >= 1 && num <= 65535) {
+      return num;
+    }
+  }
+  return 3000;
+})();
 
 const UPLOADS_DIR = path.join(process.cwd(), 'uploads');
 if (!fs.existsSync(UPLOADS_DIR)) {
