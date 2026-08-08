@@ -16,7 +16,13 @@ import { getPartnerPageNames } from './src/server/trackerLinkGuard';
 import { connectDatabase, syncDatabaseParity, getStorageMode } from './src/server/dbConnection';
 
 
-const upload = multer({ dest: 'temp_uploads/' });
+const upload = multer({
+  dest: 'temp_uploads/',
+  limits: {
+    fileSize: 50 * 1024 * 1024,
+    files: 2000
+  }
+});
 
 const app = express();
 const PORT = (() => {
@@ -3316,6 +3322,23 @@ app.post('/api/import-zip', upload.single('backup'), async (req, res) => {
 
 // Vite Middleware for Development
 async function startServer() {
+  app.use((err: any, req: express.Request, res: express.Response, next: express.NextFunction) => {
+    if (err instanceof multer.MulterError) {
+      console.error('Multer error:', err);
+      if (err.code === 'LIMIT_FILE_SIZE') {
+        return res.status(413).json({ error: 'File too large. Maximum allowed size per file is 50 MB.' });
+      }
+      if (err.code === 'LIMIT_FILE_COUNT') {
+        return res.status(413).json({ error: 'Too many files uploaded at once. Maximum is 2000 files.' });
+      }
+      if (err.code === 'LIMIT_UNEXPECTED_FILE') {
+        return res.status(413).json({ error: 'Unexpected file field received.' });
+      }
+      return res.status(413).json({ error: `Upload rejected: ${err.code}` });
+    }
+    next(err);
+  });
+
   // Global error handler for API routes to prevent HTML error pages (e.g., from multer limits)
   app.use('/api', (err: any, req: any, res: any, next: any) => {
     console.error('API Error:', err);
