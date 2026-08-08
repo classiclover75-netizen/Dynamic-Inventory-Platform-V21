@@ -106,6 +106,64 @@ app.use('/uploads', express.static(UPLOADS_DIR, {
   }
 }));
 
+app.get('/api/image-usage', async (req, res) => {
+  try {
+    const filename = req.query.filename as string;
+    const sanitizedFilename = path.basename(filename || '');
+
+    if (!sanitizedFilename || sanitizedFilename !== filename || sanitizedFilename === '.' || sanitizedFilename === '..') {
+      return res.status(400).json({ error: 'Invalid filename' });
+    }
+
+    const referencingRows: any[] = [];
+    let count = 0;
+
+    const checkRow = (row: any, pageName: string, rowNumber: number) => {
+      let references = false;
+      for (const [key, val] of Object.entries(row)) {
+        if (key === 'id') continue;
+        let s = null;
+        if (typeof val === 'string') {
+          s = val;
+        } else if (val && typeof val === 'object' && typeof (val as any).data === 'string') {
+          s = (val as any).data;
+        }
+        if (s === sanitizedFilename) {
+          references = true;
+          break;
+        }
+      }
+      if (references) {
+        count++;
+        referencingRows.push({ pageName, rowId: row.id, rowNumber });
+      }
+    };
+
+    if (isUsingMongoDB) {
+      const pages = await Page.find({}, { name: 1 }).lean();
+      for (const p of pages) {
+        const sortedRows = await getSortedPageRows(p.name);
+        sortedRows.forEach((row: any, index: number) => {
+          checkRow(row.data, p.name, index + 1);
+        });
+      }
+    } else {
+      const db = await getLocalDB();
+      for (const p of db.pages) {
+        const rows = p.rows || [];
+        rows.forEach((row: any, index: number) => {
+          checkRow(row, p.name, index + 1);
+        });
+      }
+    }
+
+    res.json({ ok: true, count, rows: referencingRows });
+  } catch (err: any) {
+    console.error("GET /api/image-usage Error:", err);
+    res.status(500).json({ error: 'Failed to fetch image usage' });
+  }
+});
+
 let isUsingMongoDB = false;
 
 connectDatabase({
@@ -2031,10 +2089,12 @@ app.patch('/api/pageRows/:name(*)/:rowId', async (req, res) => {
         return res.status(404).json({ error: 'Row not found' });
       }
 
+      const oldRowData = { ...rowToUpdate.data };
       const newRowData = { ...rowToUpdate.data, ...updates };
       const processedRow = await processRowImages(newRowData, forceSave);
 
       await PageRow.findByIdAndUpdate(rowToUpdate._id, { data: processedRow });
+      await cleanupOrphanImages([oldRowData], [processedRow]);
       await triggerLocalBackup();
     } else {
       const db = await getLocalDB();
@@ -2046,11 +2106,13 @@ app.patch('/api/pageRows/:name(*)/:rowId', async (req, res) => {
         return res.status(404).json({ error: 'Row not found' });
       }
 
+      const oldRowData = { ...page.rows[idx] };
       const newRowData = { ...page.rows[idx], ...updates };
       const processedRow = await processRowImages(newRowData, forceSave);
 
       page.rows[idx] = processedRow;
       await saveLocalDB(db);
+      await cleanupOrphanImages([oldRowData], [processedRow]);
     }
 
     res.json({ success: true });

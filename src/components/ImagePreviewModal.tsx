@@ -59,6 +59,7 @@ export const ImagePreviewModal = React.memo(({
   const containerRef = useRef<HTMLDivElement>(null);
 
   const [actualSize, setActualSize] = useState<{ loading: boolean, size: number | null, error: boolean }>({ loading: false, size: null, error: false });
+  const [imageUsage, setImageUsage] = useState<{ loading: boolean, count: number, rows: any[], error: boolean } | null>(null);
 
   useEffect(() => {
     if (isOpen) {
@@ -82,7 +83,36 @@ export const ImagePreviewModal = React.memo(({
 
     if (!reference) {
       setActualSize({ loading: false, size: null, error: false });
+      setImageUsage(null);
       return;
+    }
+
+    const isExternalUrl = reference.startsWith('http://') || reference.startsWith('https://');
+
+    if (!isExternalUrl) {
+      setImageUsage({ loading: true, count: 0, rows: [], error: false });
+      fetch(`/api/image-usage?filename=${encodeURIComponent(reference)}`)
+        .then(res => {
+          if (!res.ok) throw new Error('Failed');
+          return res.json();
+        })
+        .then(data => {
+          const currentRawVal = row[imageColKey];
+          let currentRef = '';
+          if (typeof currentRawVal === 'object' && currentRawVal !== null && typeof currentRawVal.data === 'string') {
+            currentRef = currentRawVal.data;
+          } else if (typeof currentRawVal === 'string') {
+            currentRef = currentRawVal;
+          }
+          if (currentRef !== reference) return;
+          setImageUsage({ loading: false, count: data.count, rows: data.rows || [], error: false });
+        })
+        .catch(err => {
+          console.error("Failed to fetch image usage:", err);
+          setImageUsage({ loading: false, count: 0, rows: [], error: true });
+        });
+    } else {
+      setImageUsage(null);
     }
 
     setActualSize({ loading: true, size: null, error: false });
@@ -154,6 +184,33 @@ export const ImagePreviewModal = React.memo(({
       return (bytes / (1024 * 1024)).toFixed(2) + ' MB';
     }
     return Math.round(bytes / 1024) + ' KB';
+  };
+
+  const renderUsageWarning = (actionType: 'delete' | 'replace') => {
+    if (isExternalUrl || !imageUsage || imageUsage.loading || imageUsage.error) {
+      if (actionType === 'delete') return <div className="text-xs font-bold text-red-700">Are you sure you want to remove this image?</div>;
+      return null;
+    }
+    if (imageUsage.count <= 1) {
+      return <div className="text-xs font-bold text-red-700">The image is not used anywhere else and will be permanently deleted. Are you sure you want to continue?</div>;
+    }
+    
+    const otherRows = imageUsage.rows.filter(r => !(r.rowId === row.id && r.pageName === pageName));
+    if (otherRows.length === 0) {
+       return <div className="text-xs font-bold text-red-700">The image is not used anywhere else and will be permanently deleted. Are you sure you want to continue?</div>;
+    }
+
+    return (
+      <div className="text-xs font-bold text-amber-700 flex flex-col gap-1">
+        <span>This image will be removed from this row but the file will be kept because other rows still use it. Used by:</span>
+        <ul className="m-0 pl-4 font-normal">
+          {otherRows.map((r, i) => (
+            <li key={i}>{r.pageName} - row {r.rowNumber}</li>
+          ))}
+        </ul>
+        <span className="font-bold mt-1">Are you sure you want to continue?</span>
+      </div>
+    );
   };
 
   const handleApplyReplace = () => {
@@ -319,7 +376,7 @@ export const ImagePreviewModal = React.memo(({
               </>
             ) : (
               <div className="flex flex-col gap-2 w-full bg-red-50 p-3 rounded-md border border-red-200">
-                <div className="text-xs font-bold text-red-700">Are you sure you want to remove this image?</div>
+                {renderUsageWarning('delete')}
                 <div className="flex gap-2">
                   <Button 
                     variant="red" 
@@ -359,6 +416,7 @@ export const ImagePreviewModal = React.memo(({
               ) : (
                 <input id="previewReplaceFile" type="file" accept="image/*" className="mb-1.5 text-xs" />
               )}
+              {renderUsageWarning('replace')}
               <div className="flex gap-2">
                 <Button variant="green" onClick={handleApplyReplace}>Apply</Button>
                 <Button variant="red" onClick={() => setShowReplacePanel(false)}>Cancel</Button>
