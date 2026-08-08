@@ -202,7 +202,7 @@ async function getLocalDB() {
 
 async function saveLocalDB(data: any) {
   const tmpPath = `${LOCAL_DB_PATH}.tmp`;
-  await fs.promises.writeFile(tmpPath, JSON.stringify(data, null, 2));
+  await fs.promises.writeFile(tmpPath, JSON.stringify(data));
   await fs.promises.rename(tmpPath, LOCAL_DB_PATH);
 }
 
@@ -1454,16 +1454,14 @@ app.get('/api/pages/delete-impact', async (req, res) => {
         return res.status(404).json({ error: 'Page not found' });
       }
       
-      const pageRows = await getSortedPageRows({ pageName: name });
-      const rowCount = pageRows.length;
+      const rowCount = await PageRow.countDocuments({ pageName: name });
       
       const linkedPages = await Page.find({ "config.linkedSourcePage": name }).lean();
       const linkedNames = linkedPages.map((p: any) => p.name);
       
       let linkedRowCount = 0;
       for (const pName of linkedNames) {
-        const pRows = await getSortedPageRows({ pageName: pName });
-        linkedRowCount += pRows.length;
+        linkedRowCount += await PageRow.countDocuments({ pageName: pName });
       }
       
       return res.json({
