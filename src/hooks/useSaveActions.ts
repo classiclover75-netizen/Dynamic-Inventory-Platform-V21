@@ -194,6 +194,31 @@ export function useSaveActions(deps: {
         }
       }));
 
+      let hasRemoteUrl = false;
+      for (const row of newRows) {
+        for (const [key, val] of Object.entries(row)) {
+          if (key === 'id') continue;
+          let s = null;
+          if (typeof val === 'string') {
+            s = val;
+          } else if (val && typeof val === 'object' && typeof (val as any).data === 'string') {
+            s = (val as any).data;
+          }
+          if (s) {
+            const lower = s.toLowerCase();
+            if ((lower.startsWith('http://') || lower.startsWith('https://')) && !lower.includes('/uploads/')) {
+              hasRemoteUrl = true;
+              break;
+            }
+          }
+        }
+        if (hasRemoteUrl) break;
+      }
+
+      if (hasRemoteUrl && refetchAndHydrateState) {
+        await refetchAndHydrateState();
+      }
+
       // Jab database se OK aa jaye, tabhi success message show karein
       if (returnToImagePreview) {
         toggleModal("imagePreview", true);

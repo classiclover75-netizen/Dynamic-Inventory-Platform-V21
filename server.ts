@@ -1955,6 +1955,7 @@ app.patch('/api/pageRows/:name(*)/bulk', async (req, res) => {
           await PageRow.bulkWrite(bulkOps, { session });
           
           await session.commitTransaction();
+          transactionsSupported = true;
         } catch (txnErr: any) {
           if (session) {
             await session.abortTransaction().catch(() => {});
