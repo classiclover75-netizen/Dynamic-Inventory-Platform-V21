@@ -629,7 +629,8 @@ async function diskSweepOrphans(allNewRows: any[]) {
 // Mongoose Schema
 const pageSchema = new mongoose.Schema({
   name: { type: String, required: true, unique: true },
-  config: { type: mongoose.Schema.Types.Mixed, default: {} }
+  config: { type: mongoose.Schema.Types.Mixed, default: {} },
+  rowsVersion: { type: Number, default: 0 }
 });
 const Page = mongoose.model('Page', pageSchema);
 
@@ -1582,7 +1583,8 @@ app.get('/api/pages/:name(*)', async (req, res) => {
       return res.json({
         name: page.name,
         config: page.config,
-        rows: rows.map((r: any) => r.data)
+        rows: rows.map((r: any) => r.data),
+        rowsVersion: page.rowsVersion || 0
       });
     } else {
       const db = await getLocalDB();
@@ -1592,7 +1594,8 @@ app.get('/api/pages/:name(*)', async (req, res) => {
       return res.json({
         name: page.name,
         config: page.config,
-        rows: page.rows || []
+        rows: page.rows || [],
+        rowsVersion: 0
       });
     }
   } catch (err) {
@@ -2085,6 +2088,7 @@ async function executeSafeBulkWrite(bulkOps: any[]) {
 }
 app.put('/api/pageRows/:name(*)', async (req, res) => {
   try {
+    let rowsVersion = 0;
     const { name } = req.params;
     const { rows } = req.body;
     const forceSave = req.query.force === 'true';
@@ -2227,6 +2231,8 @@ app.put('/api/pageRows/:name(*)', async (req, res) => {
           }
         }
       }
+      const updatedPage = await Page.findOneAndUpdate({ name }, { $inc: { rowsVersion: 1 } }, { new: true });
+      rowsVersion = updatedPage?.rowsVersion || 0;
       await triggerLocalBackup();
     } else {
       const db = await getLocalDB();
@@ -2238,7 +2244,7 @@ app.put('/api/pageRows/:name(*)', async (req, res) => {
       }
       await saveLocalDB(db);
     }
-    res.json({ success: true });
+    res.json({ success: true, rowsVersion });
   } catch (err: any) {
     if (err.message === 'SHARP_UNSUPPORTED_FORMAT') {
       return res.status(400).json({ requiresConfirmation: true, error: "Unsupported image format detected. The system can only process standard images (JPG, PNG, WEBP, GIF, AVIF, TIFF). Do you want to force save this file as-is without processing?" });
@@ -2249,6 +2255,7 @@ app.put('/api/pageRows/:name(*)', async (req, res) => {
 
 app.patch('/api/pageRows/:name(*)/bulk', async (req, res) => {
   try {
+    let rowsVersion = 0;
     const { name } = req.params;
     const { order, updates } = req.body;
     const forceSave = req.query.force === 'true';
@@ -2320,6 +2327,8 @@ app.patch('/api/pageRows/:name(*)/bulk', async (req, res) => {
           }
         }
       }
+      const updatedPage = await Page.findOneAndUpdate({ name }, { $inc: { rowsVersion: 1 } }, { new: true });
+      rowsVersion = updatedPage?.rowsVersion || 0;
       await triggerLocalBackup();
     } else {
       const db = await getLocalDB();
@@ -2354,7 +2363,7 @@ app.patch('/api/pageRows/:name(*)/bulk', async (req, res) => {
       await saveLocalDB(db);
     }
 
-    res.json({ success: true });
+    res.json({ success: true, rowsVersion });
   } catch (err: any) {
     if (err.message === 'SHARP_UNSUPPORTED_FORMAT') {
       return res.status(400).json({ requiresConfirmation: true, error: "Unsupported image format detected. Do you want to force save this file as-is without processing?" });
@@ -2366,6 +2375,7 @@ app.patch('/api/pageRows/:name(*)/bulk', async (req, res) => {
 
 app.patch('/api/pageRows/:name(*)/:rowId', async (req, res) => {
   try {
+    let rowsVersion = 0;
     const { name, rowId } = req.params;
     const { updates } = req.body;
     const forceSave = req.query.force === 'true';
@@ -2382,6 +2392,8 @@ app.patch('/api/pageRows/:name(*)/:rowId', async (req, res) => {
 
       await PageRow.findByIdAndUpdate(rowToUpdate._id, { data: processedRow });
       await cleanupOrphanImages([oldRowData], [processedRow]);
+      const updatedPage = await Page.findOneAndUpdate({ name }, { $inc: { rowsVersion: 1 } }, { new: true });
+      rowsVersion = updatedPage?.rowsVersion || 0;
       await triggerLocalBackup();
     } else {
       const db = await getLocalDB();
@@ -2402,7 +2414,7 @@ app.patch('/api/pageRows/:name(*)/:rowId', async (req, res) => {
       await cleanupOrphanImages([oldRowData], [processedRow]);
     }
 
-    res.json({ success: true });
+    res.json({ success: true, rowsVersion });
   } catch (err: any) {
     if (err.message === 'SHARP_UNSUPPORTED_FORMAT') {
       return res.status(400).json({ requiresConfirmation: true, error: "Unsupported image format detected. The system can only process standard images (JPG, PNG, WEBP, GIF, AVIF, TIFF). Do you want to force save this file as-is without processing?" });
@@ -2414,6 +2426,7 @@ app.patch('/api/pageRows/:name(*)/:rowId', async (req, res) => {
 
 app.post('/api/pageRows/:name(*)/append', async (req, res) => {
   try {
+    let rowsVersion = 0;
     const { name } = req.params;
     const { rows } = req.body;
     const forceSave = req.query.force === 'true';
@@ -2484,6 +2497,8 @@ app.post('/api/pageRows/:name(*)/append', async (req, res) => {
       if (recordsToInsert.length > 0) {
         await PageRow.insertMany(recordsToInsert);
       }
+      const updatedPage = await Page.findOneAndUpdate({ name }, { $inc: { rowsVersion: 1 } }, { new: true });
+      rowsVersion = updatedPage?.rowsVersion || 0;
       await triggerLocalBackup();
     } else {
       const db = await getLocalDB();
@@ -2493,7 +2508,7 @@ app.post('/api/pageRows/:name(*)/append', async (req, res) => {
       await saveLocalDB(db);
     }
     
-    res.json({ success: true });
+    res.json({ success: true, rowsVersion });
   } catch (err: any) {
     if (err.message === 'SHARP_UNSUPPORTED_FORMAT') {
       return res.status(400).json({ requiresConfirmation: true, error: "Unsupported image format detected. The system can only process standard images (JPG, PNG, WEBP, GIF, AVIF, TIFF). Do you want to force save this file as-is without processing?" });
@@ -2505,6 +2520,7 @@ app.post('/api/pageRows/:name(*)/append', async (req, res) => {
 
 app.delete('/api/pageRows/:name(*)/:rowId', async (req, res) => {
   try {
+    let rowsVersion = 0;
     const { name, rowId } = req.params;
     let deletedRowData = null;
 
@@ -2517,6 +2533,8 @@ app.delete('/api/pageRows/:name(*)/:rowId', async (req, res) => {
       deletedRowData = rowToDelete.data;
       await PageRow.findByIdAndDelete(rowToDelete._id);
       
+      const updatedPage = await Page.findOneAndUpdate({ name }, { $inc: { rowsVersion: 1 } }, { new: true });
+      rowsVersion = updatedPage?.rowsVersion || 0;
       await triggerLocalBackup();
     } else {
       const db = await getLocalDB();
@@ -2534,7 +2552,7 @@ app.delete('/api/pageRows/:name(*)/:rowId', async (req, res) => {
       await cleanupOrphanImages([deletedRowData], [], false);
     }
     
-    res.json({ success: true });
+    res.json({ success: true, rowsVersion });
   } catch (err: any) {
     console.error("DELETE Row Error:", err);
     res.status(400).json({ error: err.message || 'Failed to delete row' });
