@@ -1,7 +1,6 @@
 import { backfillThumbnails } from './src/server/backfillThumbnails';
 import express from 'express';
 import mongoose from 'mongoose';
-import cors from 'cors';
 import { createServer as createViteServer } from 'vite';
 import path from 'path';
 import fs from 'fs';
@@ -45,7 +44,6 @@ function deleteImageFile(filename: string) {
   }
 }
 
-app.use(cors());
 app.use(express.json({ limit: '100mb' }));
 app.use(express.urlencoded({ limit: '100mb', extended: true }));
 
@@ -55,7 +53,7 @@ app.get('/api/health', (req, res) => {
     status: 'ok',
     storage: modeInfo.mode,
     mongoConnected: isUsingMongoDB,
-    transactionsSupported: transactionsSupported || false,
+    transactionsSupported: (transactionsSupported === null || transactionsSupported === undefined) ? 'unknown' : (transactionsSupported ? 'enabled' : 'disabled'),
     connectedAt: modeInfo.connectedAt
   });
 });
@@ -63,8 +61,14 @@ app.get('/api/health', (req, res) => {
 app.get('/uploads/thumb/:filename', async (req, res, next) => {
   try {
     const { filename } = req.params;
-    const originalPath = path.join(UPLOADS_DIR, filename);
-    const thumbFilename = `thumb_${filename}`;
+    const sanitizedFilename = path.basename(filename);
+    
+    if (!sanitizedFilename || sanitizedFilename !== filename) {
+      return res.status(400).json({ error: 'Invalid filename' });
+    }
+    
+    const originalPath = path.join(UPLOADS_DIR, sanitizedFilename);
+    const thumbFilename = `thumb_${sanitizedFilename}`;
     const thumbPath = path.join(UPLOADS_DIR, thumbFilename);
 
     if (!fs.existsSync(originalPath)) {
@@ -1529,22 +1533,74 @@ app.delete('/api/pages/:name(*)', async (req, res) => {
   }
 });
 
+
+async function validateUrlForSSRF(urlString: string): Promise<boolean> {
+  try {
+    const dns = await import('dns');
+    const net = await import('net');
+    const parsed = new URL(urlString);
+    if (parsed.protocol !== 'http:' && parsed.protocol !== 'https:') {
+      return false;
+    }
+    const hostname = parsed.hostname;
+    const addresses = await dns.promises.lookup(hostname, { all: true });
+    if (!addresses || addresses.length === 0) return false;
+    
+    for (const record of addresses) {
+      let ip = record.address;
+      if (ip.startsWith('::ffff:')) {
+        ip = ip.substring(7);
+      }
+      if (net.isIPv4(ip)) {
+        const parts = ip.split('.').map(Number);
+        if (parts[0] === 0) return false;
+        if (parts[0] === 10) return false;
+        if (parts[0] === 100 && parts[1] >= 64 && parts[1] <= 127) return false;
+        if (parts[0] === 127) return false;
+        if (parts[0] === 169 && parts[1] === 254) return false;
+        if (parts[0] === 172 && parts[1] >= 16 && parts[1] <= 31) return false;
+        if (parts[0] === 192 && parts[1] === 168) return false;
+      } else if (net.isIPv6(ip)) {
+        const lowerIp = ip.toLowerCase();
+        if (lowerIp === '::1') return false;
+        if (lowerIp === '::') return false;
+        if (lowerIp.startsWith('fc') || lowerIp.startsWith('fd')) return false;
+        if (lowerIp.startsWith('fe80')) return false;
+      }
+    }
+    return true;
+  } catch (err) {
+    return false;
+  }
+}
+
 app.get('/api/url-image-size', async (req, res) => {
   try {
     const url = req.query.url as string;
-    if (!url || typeof url !== 'string' || !/^https?:\/\//i.test(url)) {
-      return res.json({ ok: false });
+    if (!url || typeof url !== 'string') {
+      return res.status(400).json({ error: 'Invalid URL parameter' });
+    }
+
+    const isSafe = await validateUrlForSSRF(url);
+    if (!isSafe) {
+      return res.status(400).json({ error: 'URL is not allowed' });
     }
 
     const abortController = new AbortController();
-    const timeoutId = setTimeout(() => abortController.abort(), 8000);
+    const timeoutId = setTimeout(() => abortController.abort(), 10000);
 
     try {
       const headResponse = await fetch(url, {
         method: 'HEAD',
-        signal: abortController.signal
+        signal: abortController.signal,
+        redirect: 'manual'
       });
       
+      if (headResponse.status >= 300 && headResponse.status < 400) {
+        clearTimeout(timeoutId);
+        return res.status(400).json({ error: 'Redirects are not allowed' });
+      }
+            
       if (headResponse.ok) {
         const contentLength = headResponse.headers.get('content-length');
         if (contentLength && !isNaN(Number(contentLength))) {
@@ -1559,17 +1615,23 @@ app.get('/api/url-image-size', async (req, res) => {
     try {
       const getResponse = await fetch(url, {
         method: 'GET',
-        signal: abortController.signal
+        signal: abortController.signal,
+        redirect: 'manual'
       });
+      
+      if (getResponse.status >= 300 && getResponse.status < 400) {
+        clearTimeout(timeoutId);
+        return res.status(400).json({ error: 'Redirects are not allowed' });
+      }
 
       if (!getResponse.ok || !getResponse.body) {
         clearTimeout(timeoutId);
-        return res.json({ ok: false });
+        return res.status(400).json({ error: 'Failed to fetch image' });
       }
 
       const reader = getResponse.body.getReader();
       let totalBytes = 0;
-      const MAX_BYTES = 25 * 1024 * 1024;
+      const MAX_BYTES = 10 * 1024 * 1024;
 
       while (true) {
         const { done, value } = await reader.read();
@@ -1578,20 +1640,20 @@ app.get('/api/url-image-size', async (req, res) => {
           totalBytes += value.length;
           if (totalBytes > MAX_BYTES) {
             abortController.abort();
-            break;
+            clearTimeout(timeoutId);
+            return res.status(400).json({ error: 'Image exceeds size limit' });
           }
         }
       }
-      
+            
       clearTimeout(timeoutId);
       return res.json({ ok: true, sizeBytes: totalBytes });
     } catch (e) {
       clearTimeout(timeoutId);
-      return res.json({ ok: false });
+      return res.status(400).json({ error: 'Failed to fetch image' });
     }
-
   } catch (err) {
-    return res.json({ ok: false });
+    return res.status(400).json({ error: 'Internal error validating URL' });
   }
 });
 
