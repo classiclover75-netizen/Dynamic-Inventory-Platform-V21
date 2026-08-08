@@ -1487,6 +1487,9 @@ app.post('/api/pages', async (req, res) => {
     }
     res.json({ success: true });
   } catch (err: any) {
+    if (err.code === 11000) {
+      return res.status(409).json({ error: 'A page with that name already exists.' });
+    }
     res.status(500).json({ error: err.message || 'Failed to create page' });
   }
 });
@@ -1495,41 +1498,187 @@ app.put('/api/pages/:name(*)/rename', async (req, res) => {
   try {
     const { name } = req.params;
     const { newName } = req.body;
+
+    if (!newName || typeof newName !== 'string' || !newName.trim()) {
+      return res.status(400).json({ error: 'Invalid new name' });
+    }
+    const trimmedNewName = newName.trim();
+
+    if (trimmedNewName === name) {
+      return res.json({ success: true });
+    }
+
     if (isUsingMongoDB) {
-      await Page.findOneAndUpdate({ name }, { name: newName });
-      await PageRow.updateMany({ pageName: name }, { pageName: newName });
-      
-      const linkedPages = await Page.find({ "config.linkedSourcePage": name });
-      for (const p of linkedPages) {
-        const newConfig = { ...(p.config || {}) };
-        newConfig.linkedSourcePage = newName;
-        await Page.findByIdAndUpdate(p._id, { config: newConfig });
+      const existingPage = await Page.findOne({ name });
+      if (!existingPage) {
+        return res.status(404).json({ error: 'Page not found' });
       }
-      const searchLinkedPages = await Page.find({ "config.secondarySearchPage": name });
-      for (const p of searchLinkedPages) {
-        const newConfig = { ...(p.config || {}) };
-        newConfig.secondarySearchPage = newName;
-        await Page.findByIdAndUpdate(p._id, { config: newConfig });
+      const duplicatePage = await Page.findOne({ name: trimmedNewName });
+      if (duplicatePage) {
+        return res.status(409).json({ error: 'A page with that name already exists.' });
       }
+
+      let session = null;
+      if (transactionsSupported !== false) {
+        try {
+          session = await mongoose.startSession();
+          session.startTransaction();
+        } catch (e) {
+          transactionsSupported = false;
+          session = null;
+        }
+      }
+
+      try {
+        const opts = session ? { session } : {};
+        await Page.findOneAndUpdate({ name }, { name: trimmedNewName }, opts);
+        await PageRow.updateMany({ pageName: name }, { pageName: trimmedNewName }, opts);
+        
+        const linkedPages = await Page.find({ "config.linkedSourcePage": name }, null, opts);
+        for (const p of linkedPages) {
+          const newConfig = { ...(p.config || {}) };
+          newConfig.linkedSourcePage = trimmedNewName;
+          await Page.findByIdAndUpdate(p._id, { config: newConfig }, opts);
+        }
+
+        const searchLinkedPages = await Page.find({ "config.secondarySearchPage": name }, null, opts);
+        for (const p of searchLinkedPages) {
+          const newConfig = { ...(p.config || {}) };
+          newConfig.secondarySearchPage = trimmedNewName;
+          await Page.findByIdAndUpdate(p._id, { config: newConfig }, opts);
+        }
+
+        if (session) {
+          await session.commitTransaction();
+          transactionsSupported = true;
+        }
+      } catch (txnErr: any) {
+        if (session) {
+          await session.abortTransaction().catch(() => {});
+        }
+        
+        const errMsg = (txnErr.message || '').toLowerCase();
+        const isUnsupported = errMsg.includes('replica set') || errMsg.includes('transaction') || errMsg.includes('not supported') || txnErr.code === 20 || txnErr.code === 263 || txnErr.name === 'IllegalOperation';
+        
+        if (session && isUnsupported) {
+          console.warn("Transaction not supported on write, falling back to non-transactional bulk write:", txnErr.message);
+          transactionsSupported = false;
+          await Page.findOneAndUpdate({ name }, { name: trimmedNewName });
+          await PageRow.updateMany({ pageName: name }, { pageName: trimmedNewName });
+          
+          const linkedPages = await Page.find({ "config.linkedSourcePage": name });
+          for (const p of linkedPages) {
+            const newConfig = { ...(p.config || {}) };
+            newConfig.linkedSourcePage = trimmedNewName;
+            await Page.findByIdAndUpdate(p._id, { config: newConfig });
+          }
+
+          const searchLinkedPages = await Page.find({ "config.secondarySearchPage": name });
+          for (const p of searchLinkedPages) {
+            const newConfig = { ...(p.config || {}) };
+            newConfig.secondarySearchPage = trimmedNewName;
+            await Page.findByIdAndUpdate(p._id, { config: newConfig });
+          }
+        } else {
+          throw txnErr;
+        }
+      } finally {
+        if (session) {
+          session.endSession();
+        }
+      }
+
       await triggerLocalBackup();
     } else {
       const db = await getLocalDB();
       const page = db.pages.find((p: any) => p.name === name);
-      if (page) page.name = newName;
+      if (!page) {
+        return res.status(404).json({ error: 'Page not found' });
+      }
+      if (db.pages.some((p: any) => p.name === trimmedNewName)) {
+        return res.status(409).json({ error: 'A page with that name already exists.' });
+      }
+
+      page.name = trimmedNewName;
       
       db.pages.forEach((p: any) => {
         if (p.config && p.config.linkedSourcePage === name) {
-          p.config.linkedSourcePage = newName;
+          p.config.linkedSourcePage = trimmedNewName;
         }
         if (p.config && p.config.secondarySearchPage === name) {
-          p.config.secondarySearchPage = newName;
+          p.config.secondarySearchPage = trimmedNewName;
         }
       });
+      
       await saveLocalDB(db);
     }
+
     res.json({ success: true });
   } catch (err: any) {
+    if (err.code === 11000) {
+      return res.status(409).json({ error: 'A page with that name already exists.' });
+    }
     res.status(500).json({ error: err.message || 'Failed to rename page' });
+  }
+});
+
+app.get('/api/pages/delete-impact', async (req, res) => {
+  try {
+    const name = typeof req.query.name === 'string' ? req.query.name : '';
+    if (!name) return res.status(400).json({ error: 'Missing name' });
+
+    if (isUsingMongoDB) {
+      const pageExists = await Page.findOne({ name }).lean();
+      if (!pageExists) {
+        return res.status(404).json({ error: 'Page not found' });
+      }
+      
+      const pageRows = await getSortedPageRows({ pageName: name });
+      const rowCount = pageRows.length;
+      
+      const linkedPages = await Page.find({ "config.linkedSourcePage": name }).lean();
+      const linkedNames = linkedPages.map((p: any) => p.name);
+      
+      let linkedRowCount = 0;
+      for (const pName of linkedNames) {
+        const pRows = await getSortedPageRows({ pageName: pName });
+        linkedRowCount += pRows.length;
+      }
+      
+      return res.json({
+        ok: true,
+        pageName: name,
+        rowCount,
+        linkedPages: linkedNames,
+        linkedRowCount
+      });
+    } else {
+      const db = await getLocalDB();
+      const page = db.pages.find((p: any) => p.name === name);
+      if (!page) {
+        return res.status(404).json({ error: 'Page not found' });
+      }
+      
+      const rowCount = (page.rows || []).length;
+      
+      const linkedPages = db.pages.filter((p: any) => p.config && p.config.linkedSourcePage === name);
+      const linkedNames = linkedPages.map((p: any) => p.name);
+      
+      let linkedRowCount = 0;
+      for (const p of linkedPages) {
+        linkedRowCount += (p.rows || []).length;
+      }
+      
+      return res.json({
+        ok: true,
+        pageName: name,
+        rowCount,
+        linkedPages: linkedNames,
+        linkedRowCount
+      });
+    }
+  } catch (err: any) {
+    res.status(500).json({ error: err.message || 'Failed to check delete impact' });
   }
 });
 
@@ -1538,37 +1687,102 @@ app.delete('/api/pages/:name(*)', async (req, res) => {
     const { name } = req.params;
     let deletedRows: any[] = [];
     if (isUsingMongoDB) {
-      const pageRows = await getSortedPageRows({ pageName: name });
-      deletedRows = pageRows.map((r: any) => r.data);
-      await Page.findOneAndDelete({ name });
-      await PageRow.deleteMany({ pageName: name });
-      
-      const linkedPages = await Page.find({ "config.linkedSourcePage": name });
-      const linkedNames = linkedPages.map((p: any) => p.name);
-      const allDeletedNames = [name, ...linkedNames];
-      
-      for (const p of linkedPages) {
-        const linkedPageRows = await getSortedPageRows({ pageName: p.name });
-        deletedRows.push(...linkedPageRows.map((r: any) => r.data));
-        await Page.findOneAndDelete({ name: p.name });
-        await PageRow.deleteMany({ pageName: p.name });
+      const pageExists = await Page.findOne({ name });
+      if (!pageExists) {
+        return res.status(404).json({ error: 'Page not found' });
       }
-      
-      const searchLinkedPages = await Page.find({ "config.secondarySearchPage": { $in: allDeletedNames } });
-      for (const p of searchLinkedPages) {
-        const newConfig = { ...(p.config || {}) };
-        delete newConfig.secondarySearchPage;
-        await Page.findByIdAndUpdate(p._id, { config: newConfig });
+
+      let session = null;
+      if (transactionsSupported !== false) {
+        try {
+          session = await mongoose.startSession();
+          session.startTransaction();
+        } catch (e) {
+          transactionsSupported = false;
+          session = null;
+        }
       }
-      
+
+      try {
+        const opts = session ? { session } : {};
+        const pageRows = await getSortedPageRows({ pageName: name });
+        deletedRows = pageRows.map((r: any) => r.data);
+        await Page.findOneAndDelete({ name }, opts);
+        await PageRow.deleteMany({ pageName: name }, opts);
+        
+        const linkedPages = await Page.find({ "config.linkedSourcePage": name }, null, opts);
+        const linkedNames = linkedPages.map((p: any) => p.name);
+        const allDeletedNames = [name, ...linkedNames];
+        
+        for (const p of linkedPages) {
+          const linkedPageRows = await getSortedPageRows({ pageName: p.name });
+          deletedRows.push(...linkedPageRows.map((r: any) => r.data));
+          await Page.findOneAndDelete({ name: p.name }, opts);
+          await PageRow.deleteMany({ pageName: p.name }, opts);
+        }
+        
+        const searchLinkedPages = await Page.find({ "config.secondarySearchPage": { $in: allDeletedNames } }, null, opts);
+        for (const p of searchLinkedPages) {
+          const newConfig = { ...(p.config || {}) };
+          delete newConfig.secondarySearchPage;
+          await Page.findByIdAndUpdate(p._id, { config: newConfig }, opts);
+        }
+        
+        if (session) {
+          await session.commitTransaction();
+          transactionsSupported = true;
+        }
+      } catch (txnErr: any) {
+        if (session) {
+          await session.abortTransaction().catch(() => {});
+        }
+        const errMsg = (txnErr.message || '').toLowerCase();
+        const isUnsupported = errMsg.includes('replica set') || errMsg.includes('transaction') || errMsg.includes('not supported') || txnErr.code === 20 || txnErr.code === 263 || txnErr.name === 'IllegalOperation';
+        
+        if (session && isUnsupported) {
+          console.warn("Transaction not supported on write, falling back to non-transactional bulk write:", txnErr.message);
+          transactionsSupported = false;
+          const pageRows = await getSortedPageRows({ pageName: name });
+          deletedRows = pageRows.map((r: any) => r.data);
+          await Page.findOneAndDelete({ name });
+          await PageRow.deleteMany({ pageName: name });
+          
+          const linkedPages = await Page.find({ "config.linkedSourcePage": name });
+          const linkedNames = linkedPages.map((p: any) => p.name);
+          const allDeletedNames = [name, ...linkedNames];
+          
+          for (const p of linkedPages) {
+            const linkedPageRows = await getSortedPageRows({ pageName: p.name });
+            deletedRows.push(...linkedPageRows.map((r: any) => r.data));
+            await Page.findOneAndDelete({ name: p.name });
+            await PageRow.deleteMany({ pageName: p.name });
+          }
+          
+          const searchLinkedPages = await Page.find({ "config.secondarySearchPage": { $in: allDeletedNames } });
+          for (const p of searchLinkedPages) {
+            const newConfig = { ...(p.config || {}) };
+            delete newConfig.secondarySearchPage;
+            await Page.findByIdAndUpdate(p._id, { config: newConfig });
+          }
+        } else {
+          throw txnErr;
+        }
+      } finally {
+        if (session) {
+          session.endSession();
+        }
+      }
+
       await triggerLocalBackup();
     } else {
       const db = await getLocalDB();
       const page = db.pages.find((p: any) => p.name === name);
-      if (page) {
-        deletedRows = page.rows || [];
-        db.pages = db.pages.filter((p: any) => p.name !== name);
+      if (!page) {
+        return res.status(404).json({ error: 'Page not found' });
       }
+      
+      deletedRows = page.rows || [];
+      db.pages = db.pages.filter((p: any) => p.name !== name);
       
       const linkedPageNames: string[] = [];
       db.pages = db.pages.filter((p: any) => {
