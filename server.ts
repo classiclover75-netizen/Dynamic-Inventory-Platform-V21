@@ -63,7 +63,7 @@ app.get('/uploads/thumb/:filename', async (req, res, next) => {
     const { filename } = req.params;
     const sanitizedFilename = path.basename(filename);
     
-    if (!sanitizedFilename || sanitizedFilename !== filename) {
+    if (!sanitizedFilename || sanitizedFilename !== filename || sanitizedFilename === '.' || sanitizedFilename === '..') {
       return res.status(400).json({ error: 'Invalid filename' });
     }
     
@@ -1714,6 +1714,7 @@ async function executeSafeBulkWrite(bulkOps: any[]) {
     if (session) {
       await PageRow.bulkWrite(bulkOps, { session });
       await session.commitTransaction();
+      transactionsSupported = true;
     } else {
       await PageRow.bulkWrite(bulkOps);
     }
@@ -1857,6 +1858,7 @@ app.put('/api/pageRows/:name(*)', async (req, res) => {
           if (session) {
             await PageRow.bulkWrite(bulkOps, { session });
             await session.commitTransaction();
+            transactionsSupported = true;
           } else {
             await PageRow.bulkWrite(bulkOps);
           }
