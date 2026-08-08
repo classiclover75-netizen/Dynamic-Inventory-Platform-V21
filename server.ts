@@ -223,9 +223,20 @@ async function performLocalBackup() {
     const pageRows = await getSortedPageRows({});
     const settings = await AppSettings.findOne({});
     
+    const rowsByPage = new Map();
+    for (const row of pageRows) {
+      const pName = row.pageName;
+      let group = rowsByPage.get(pName);
+      if (!group) {
+        group = [];
+        rowsByPage.set(pName, group);
+      }
+      group.push(row.data);
+    }
+
     const localPagesList = [];
     for (const page of pages) {
-      const rowsForPage = pageRows.filter(r => r.pageName === page.name).map(r => r.data);
+      const rowsForPage = rowsByPage.get(page.name) || [];
       localPagesList.push({
         name: page.name,
         config: page.config,
@@ -242,7 +253,7 @@ async function performLocalBackup() {
         sourceSuggestionsEnabled: settings.sourceSuggestionsEnabled
       } : {}
     };
-    await fs.promises.writeFile(LOCAL_DB_PATH, JSON.stringify(newLocalDb, null, 2));
+    await fs.promises.writeFile(LOCAL_DB_PATH, JSON.stringify(newLocalDb));
   } catch (err) {
     console.error('Failed to update local db.json backup:', err);
   } finally {
