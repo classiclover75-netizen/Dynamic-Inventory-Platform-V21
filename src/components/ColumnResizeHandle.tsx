@@ -1,6 +1,5 @@
 import { useState, useEffect, useRef } from "react";
 import { createPortal } from "react-dom";
-import { computeAutoFitWidth } from "../lib/columnAutoFit";
 
 export const ColumnResizeHandle = ({
   header,
@@ -13,6 +12,7 @@ export const ColumnResizeHandle = ({
 }) => {
   const isResizing = header?.column?.getIsResizing();
   const [isDragging, setIsDragging] = useState(false);
+  const [isHovered, setIsHovered] = useState(false);
   const [mousePos, setMousePos] = useState({ x: 0, y: 0 });
   const [showManualInput, setShowManualInput] = useState(false);
   const [inputValue, setInputValue] = useState("");
@@ -134,6 +134,16 @@ export const ColumnResizeHandle = ({
     <>
       <div
         ref={handleRef}
+        onMouseEnter={(e) => {
+          setIsHovered(true);
+          setMousePos({ x: e.clientX, y: e.clientY });
+        }}
+        onMouseMove={(e) => {
+          setMousePos({ x: e.clientX, y: e.clientY });
+        }}
+        onMouseLeave={() => {
+          setIsHovered(false);
+        }}
         onMouseDown={(e) => {
           e.stopPropagation();
           header.getResizeHandler()(e);
@@ -150,35 +160,17 @@ export const ColumnResizeHandle = ({
         }}
         onDoubleClick={(e) => {
           e.stopPropagation();
-          if (!e.ctrlKey && !e.metaKey) {
-            e.preventDefault();
-            if (!header || isResizing) return;
-            try {
-              const width = computeAutoFitWidth(handleRef.current!, header.column.id);
-              if (width !== null) {
-                if (onManualSave) {
-                  onManualSave(header.column.id, width);
-                }
-                if (header?.getContext?.()?.table?.setColumnSizing) {
-                  header.getContext().table.setColumnSizing((old: any) => ({
-                    ...old,
-                    [header.column.id]: width,
-                  }));
-                }
-              }
-            } catch (err) {}
-            return;
-          }
+          if (!e.ctrlKey && !e.metaKey) return;
           setInputValue(Math.round(header.getSize()).toString());
           setMousePos({ x: e.clientX, y: e.clientY });
           setShowManualInput(true);
         }}
-        title="Drag to resize, Double-Click to auto-fit, Ctrl+Double-Click for exact width"
+        title="Drag to resize, Ctrl+Double-Click for exact width"
         className={`absolute right-0 top-0 z-40 cursor-col-resize hover:bg-[#ADFF2F] touch-none select-none transition-colors w-[4px] h-full ${
           isResizing ? "bg-[#ADFF2F]" : ""
         }`}
       />
-      {isDragging &&
+      {(isDragging || isHovered) &&
         createPortal(
           <div
             className="fixed z-[10000] pointer-events-none bg-black/90 text-white text-[11px] font-bold px-2 py-0.5 rounded shadow-xl whitespace-nowrap"
