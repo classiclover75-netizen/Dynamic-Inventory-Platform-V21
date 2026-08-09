@@ -863,7 +863,6 @@ function AppContent() {
 
     // Save updated config
     const newConfig = { ...activeConfig, columns: updatedColumns };
-    await handleSaveActivePageSettings(newConfig, false);
 
     const updatedRows = activeRows.map((row) => {
       const newRow = { ...row };
@@ -900,6 +899,7 @@ function AppContent() {
 
     const saved = await handleSaveRows(updatedRows, state.activePage, true, "replace");
     if (saved) {
+      await handleSaveActivePageSettings(newConfig, false);
       toast(`Column "${column.name}" deleted successfully (${deleteType} mode).`);
     }
   };
@@ -1017,7 +1017,18 @@ function AppContent() {
 
   const handleClearPageData = async (pageName: string) => {
     try {
-      await putRows(pageName, []);
+      const res = await putRows(pageName, []);
+
+      if (!res.ok) {
+        if (res.status === 409) {
+          toast("Someone else changed this page while you were editing. Your change was not saved to avoid overwriting their work. The page has been refreshed, please redo your change.", 6000);
+          if (refetchAndHydrateState) {
+            await refetchAndHydrateState();
+          }
+          return;
+        }
+        throw new Error("Database failed to clear page data");
+      }
 
       setState((prev) => ({
         ...prev,

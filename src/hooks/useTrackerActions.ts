@@ -270,7 +270,6 @@ export function useTrackerActions(deps: {
     );
 
     const newConfig = { ...activeConfig, columns: updatedColumns };
-    await handleSaveActivePageSettings(newConfig, false);
 
     const updatedRows = activeRows.map((row) => {
       const newRow = { ...row };
@@ -319,6 +318,7 @@ export function useTrackerActions(deps: {
 
     const saved = await handleSaveRows(updatedRows, state.activePage, true, "replace");
     if (saved) {
+      await handleSaveActivePageSettings(newConfig, false);
       toast(
         `${colKeys.length} column(s) deleted successfully (${deleteType} mode).`,
       );
