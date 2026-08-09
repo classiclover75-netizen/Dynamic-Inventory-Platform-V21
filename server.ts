@@ -14,6 +14,7 @@ import unzipper from 'unzipper';
 import multer from 'multer';
 import { getPartnerPageNames } from './src/server/trackerLinkGuard';
 import { connectDatabase, syncDatabaseParity, getStorageMode } from './src/server/dbConnection';
+import { sendSafeError } from './src/server/errorResponse';
 
 
 const upload = multer({
