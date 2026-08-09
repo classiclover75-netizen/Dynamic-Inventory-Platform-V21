@@ -17,6 +17,7 @@ export function computeAutoFitWidth(handleEl: HTMLElement, colKey: string): numb
 
     let maxWidth = -1;
     let styleEl: HTMLStyleElement | null = null;
+    const restoredStyles: { el: HTMLElement; val: string; prio: string }[] = [];
 
     try {
       for (const cell of cellsToMeasure) {
@@ -33,18 +34,35 @@ export function computeAutoFitWidth(handleEl: HTMLElement, colKey: string): numb
       styleEl.textContent = `
         [data-autofit-target="1"] { overflow: visible !important; }
         [data-autofit-target="1"] *:not(img):not(svg):not(canvas):not(video) { width: auto !important; max-width: none !important; min-width: 0 !important; white-space: nowrap !important; flex-shrink: 0 !important; text-overflow: clip !important; }
-        [data-autofit-target="1"] > * { width: max-content !important; }
       `;
       document.head.appendChild(styleEl);
 
       for (const cell of cellsToMeasure) {
         const firstChild = cell.firstElementChild as HTMLElement;
-        const width = firstChild ? firstChild.offsetWidth : cell.scrollWidth;
-        if (width > maxWidth) {
-          maxWidth = width;
+        if (firstChild) {
+          const prevVal = firstChild.style.getPropertyValue('width');
+          const prevPrio = firstChild.style.getPropertyPriority('width');
+          restoredStyles.push({ el: firstChild, val: prevVal, prio: prevPrio });
+          firstChild.style.setProperty('width', 'max-content', 'important');
+          
+          const width = firstChild.offsetWidth;
+          if (width > maxWidth) {
+            maxWidth = width;
+          }
+        } else {
+          const width = cell.scrollWidth;
+          if (width > maxWidth) {
+            maxWidth = width;
+          }
         }
       }
     } finally {
+      for (const item of restoredStyles) {
+        item.el.style.removeProperty('width');
+        if (item.val) {
+          item.el.style.setProperty('width', item.val, item.prio);
+        }
+      }
       if (styleEl && styleEl.parentNode) {
         styleEl.parentNode.removeChild(styleEl);
       }
