@@ -1,7 +1,7 @@
 import React, { createContext, useContext, useState, useCallback, useRef } from 'react';
 
 interface ToastContextType {
-  toast: (message: string) => void;
+  toast: (message: string, durationMs?: number) => void;
 }
 
 const ToastContext = createContext<ToastContextType | undefined>(undefined);
@@ -10,10 +10,10 @@ export const ToastProvider: React.FC<{ children: React.ReactNode }> = ({ childre
   const [message, setMessage] = useState<string | null>(null);
   const timeoutRef = useRef<NodeJS.Timeout | null>(null);
 
-  const toast = useCallback((msg: string) => {
+  const toast = useCallback((msg: string, durationMs: number = 1800) => {
     if (timeoutRef.current) clearTimeout(timeoutRef.current);
     setMessage(msg);
-    timeoutRef.current = setTimeout(() => setMessage(null), 1800);
+    timeoutRef.current = setTimeout(() => setMessage(null), durationMs);
   }, []);
 
   return (

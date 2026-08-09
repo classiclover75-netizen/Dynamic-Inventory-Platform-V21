@@ -105,7 +105,7 @@ export function useSaveActions(deps: {
           setEditingRowId(null);
           return;
         } else if (response.status === 409) {
-          toast("Someone else changed this page while you were editing. Your change was not saved to avoid overwriting their work. The page has been refreshed, please redo your change.");
+          toast("Someone else changed this page while you were editing. Your change was not saved to avoid overwriting their work. The page has been refreshed, please redo your change.", 6000);
           if (refetchAndHydrateState) {
             await refetchAndHydrateState();
           }
