@@ -3379,7 +3379,7 @@ app.post('/api/import-zip', upload.single('backup'), async (req, res) => {
     if (req.file && fs.existsSync(req.file.path)) {
       try { fs.unlinkSync(req.file.path); } catch (e) {}
     }
-    const errorMsg = err.message || 'Failed to import zip state';
+    const errorMsg = err.message === 'Invalid or corrupted data.json inside zip archive' ? err.message : 'Failed to import zip state';
     if (isStream) {
       res.end(JSON.stringify({ type: 'error', error: errorMsg }) + '\n');
     } else {
