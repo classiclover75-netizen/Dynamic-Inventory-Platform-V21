@@ -1,5 +1,6 @@
 import { useState, useEffect, useRef } from "react";
 import { createPortal } from "react-dom";
+import { computeAutoFitWidth } from "../lib/columnAutoFit";
 
 export const ColumnResizeHandle = ({
   header,
@@ -149,12 +150,30 @@ export const ColumnResizeHandle = ({
         }}
         onDoubleClick={(e) => {
           e.stopPropagation();
-          if (!e.ctrlKey && !e.metaKey) return;
+          if (!e.ctrlKey && !e.metaKey) {
+            e.preventDefault();
+            if (!header || isResizing) return;
+            try {
+              const width = computeAutoFitWidth(handleRef.current!, header.column.id);
+              if (width !== null) {
+                if (onManualSave) {
+                  onManualSave(header.column.id, width);
+                }
+                if (header?.getContext?.()?.table?.setColumnSizing) {
+                  header.getContext().table.setColumnSizing((old: any) => ({
+                    ...old,
+                    [header.column.id]: width,
+                  }));
+                }
+              }
+            } catch (err) {}
+            return;
+          }
           setInputValue(Math.round(header.getSize()).toString());
           setMousePos({ x: e.clientX, y: e.clientY });
           setShowManualInput(true);
         }}
-        title="Drag to resize, Ctrl+Double-Click for exact width"
+        title="Drag to resize, Double-Click to auto-fit, Ctrl+Double-Click for exact width"
         className={`absolute right-0 top-0 z-40 cursor-col-resize hover:bg-[#ADFF2F] touch-none select-none transition-colors w-[4px] h-full ${
           isResizing ? "bg-[#ADFF2F]" : ""
         }`}

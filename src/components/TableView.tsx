@@ -525,6 +525,7 @@ export const TableView = ({
                                     : [];
                                   const isResizing = header?.column?.getIsResizing();
                                   const commonProps = {
+                                    "data-col-key": col.key,
                                     style: {
                                       ...widthStyle,
                                       position: (isPinned ? "sticky" : "relative") as "sticky" | "relative",
