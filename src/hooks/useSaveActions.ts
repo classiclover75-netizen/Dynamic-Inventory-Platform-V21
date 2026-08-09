@@ -1,6 +1,7 @@
 import { PageConfig, RowData } from "../types";
 import { savePageConfig, patchRow, appendPageRows, bulkPatchRows, putRows } from "../lib/api";
 import { validateReplacePayload } from "../lib/rowSaveMode";
+import { findAllLinkedTrackers } from "../lib/trackerOrderSync";
 
 export function useSaveActions(deps: {
   state: any;
@@ -17,8 +18,9 @@ export function useSaveActions(deps: {
   returnToSettings: any;
   setReturnToSettings: any;
   refetchAndHydrateState?: any;
+  loadPageData?: any;
 }) {
-  const { state, setState, toast, toggleModal, editingRowId, setEditingRowId, setConfirmationModal, setPrimarySearchTags, primParentRef, returnToImagePreview, setReturnToImagePreview, returnToSettings, setReturnToSettings, refetchAndHydrateState } = deps;
+  const { state, setState, toast, toggleModal, editingRowId, setEditingRowId, setConfirmationModal, setPrimarySearchTags, primParentRef, returnToImagePreview, setReturnToImagePreview, returnToSettings, setReturnToSettings, refetchAndHydrateState, loadPageData } = deps;
   const handleSaveActivePageSettings = async (
     config: PageConfig,
     closeModal: boolean = true,
@@ -140,16 +142,20 @@ export function useSaveActions(deps: {
       setEditingRowId(null);
 
       // Auto-sync trackers
-      const linkedTrackers = Object.entries(state.pageConfigs)
-        .filter(
-          ([_, c]) => (c as PageConfig).linkedSourcePage === targetPage,
-        )
-        .map(([name]) => name);
+      const linkedTrackers = findAllLinkedTrackers(targetPage, state.pageConfigs, state.pageLinks);
 
-      await Promise.all(linkedTrackers.map(async (trackerName) => {
-        const trackerConfig = state.pageConfigs[trackerName];
-        if (!trackerConfig) return;
-        const trackerRows = [...(state.pageRows[trackerName] || [])];
+      await Promise.allSettled(linkedTrackers.map(async (trackerName) => {
+        let trackerConfig = state.pageConfigs[trackerName];
+        let trackerRowsState = state.pageRows[trackerName];
+
+        if (!trackerConfig || !trackerRowsState) {
+          const data = await loadPageData?.(trackerName);
+          if (!data || !data.config) return;
+          trackerConfig = data.config;
+          trackerRowsState = data.rows || [];
+        }
+
+        const trackerRows = [...trackerRowsState];
         let updatedTracker = false;
         
         const updatesObj: Record<string, any> = {};

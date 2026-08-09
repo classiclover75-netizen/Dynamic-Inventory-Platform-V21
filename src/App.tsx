@@ -1061,6 +1061,7 @@ function AppContent() {
     returnToSettings,
     setReturnToSettings,
     refetchAndHydrateState,
+    loadPageData: fetchPageData,
   });
 
   const handleSaveColumnWidth = useCallback(async (colId: string, newWidth: number, targetPageOverride?: string) => {
