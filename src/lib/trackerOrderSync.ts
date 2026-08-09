@@ -54,3 +54,22 @@ export function buildTrackerOrder(
 
   return result;
 }
+
+export function findAllLinkedTrackers(
+  sourcePageName: string,
+  pageConfigs: Record<string, PageConfig | undefined>,
+  pageLinks?: Record<string, string>
+): string[] {
+  const trackers = findLinkedTrackers(sourcePageName, pageConfigs);
+  if (pageLinks && typeof pageLinks === 'object') {
+    const sourceTrimmed = sourcePageName.trim();
+    for (const [name, link] of Object.entries(pageLinks)) {
+      if (typeof link === 'string' && link.trim() === sourceTrimmed && name !== sourcePageName) {
+        if (!trackers.includes(name)) {
+          trackers.push(name);
+        }
+      }
+    }
+  }
+  return trackers;
+}

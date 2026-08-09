@@ -66,7 +66,7 @@ import { useTableHover } from "./hooks/useTableHover";
 import { useSaveActions } from "./hooks/useSaveActions";
 import { useInlineEdit } from "./hooks/useInlineEdit";
 import { filterAndSortTrackerRows } from "./lib/trackerSortUtils";
-import { findLinkedTrackers, buildTrackerOrder } from "./lib/trackerOrderSync";
+import { findAllLinkedTrackers, buildTrackerOrder } from "./lib/trackerOrderSync";
 import { createPageSafe, renamePageSafe, deletePageSafe } from "./lib/pageMutations";
 import { TableView } from "./components/TableView";
 import { ColumnResizeHandle } from "./components/ColumnResizeHandle";
@@ -107,6 +107,7 @@ function AppContent() {
     pageRows: {},
     globalRowNoWidth: 100,
     sourceSuggestionsEnabled: false,
+    pageLinks: {},
   });
 
   const [isLoading, setIsLoading] = useState(true);
@@ -227,6 +228,7 @@ function AppContent() {
             globalRowNoWidth: data.globalRowNoWidth || prev.globalRowNoWidth,
             globalCopyBoxes: data.globalCopyBoxes !== undefined ? data.globalCopyBoxes : prev.globalCopyBoxes,
             sourceSuggestionsEnabled: data.sourceSuggestionsEnabled ?? prev.sourceSuggestionsEnabled,
+            pageLinks: data.pageLinks || {},
             activePage: isValidPage
               ? urlPage
               : data.pages && data.pages.length > 0 && !prev.activePage
@@ -628,7 +630,7 @@ function AppContent() {
     try {
       await bulkPatchRows(targetPage, { order: newRows.map(r => r.id) });
 
-      const linkedTrackers = findLinkedTrackers(targetPage, state.pageConfigs);
+      const linkedTrackers = findAllLinkedTrackers(targetPage, state.pageConfigs, state.pageLinks);
       const trackerUpdates: Record<string, RowData[]> = {};
 
       await Promise.allSettled(

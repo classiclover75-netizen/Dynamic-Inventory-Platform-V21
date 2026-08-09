@@ -97,4 +97,5 @@ export interface AppState {
   maxSearchHistory?: number;
   pageOrder?: string[];
   sourceSuggestionsEnabled?: boolean;
+  pageLinks?: Record<string, string>;
 }
