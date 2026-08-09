@@ -2275,7 +2275,6 @@ app.put('/api/pageRows/:name(*)', async (req, res) => {
 
 app.patch('/api/pageRows/:name(*)/bulk', async (req, res) => {
   try {
-    let rowsVersion = 0;
     const { name } = req.params;
     const { order, updates } = req.body;
     const forceSave = req.query.force === 'true';
@@ -2347,8 +2346,6 @@ app.patch('/api/pageRows/:name(*)/bulk', async (req, res) => {
           }
         }
       }
-      const updatedPage = await Page.findOneAndUpdate({ name }, { $inc: { rowsVersion: 1 } }, { new: true });
-      rowsVersion = updatedPage?.rowsVersion || 0;
       await triggerLocalBackup();
     } else {
       const db = await getLocalDB();
@@ -2383,7 +2380,7 @@ app.patch('/api/pageRows/:name(*)/bulk', async (req, res) => {
       await saveLocalDB(db);
     }
 
-    res.json({ success: true, rowsVersion });
+    res.json({ success: true });
   } catch (err: any) {
     if (err.message === 'SHARP_UNSUPPORTED_FORMAT') {
       return res.status(400).json({ requiresConfirmation: true, error: "Unsupported image format detected. Do you want to force save this file as-is without processing?" });
@@ -2395,7 +2392,6 @@ app.patch('/api/pageRows/:name(*)/bulk', async (req, res) => {
 
 app.patch('/api/pageRows/:name(*)/:rowId', async (req, res) => {
   try {
-    let rowsVersion = 0;
     const { name, rowId } = req.params;
     const { updates } = req.body;
     const forceSave = req.query.force === 'true';
@@ -2412,8 +2408,6 @@ app.patch('/api/pageRows/:name(*)/:rowId', async (req, res) => {
 
       await PageRow.findByIdAndUpdate(rowToUpdate._id, { data: processedRow });
       await cleanupOrphanImages([oldRowData], [processedRow]);
-      const updatedPage = await Page.findOneAndUpdate({ name }, { $inc: { rowsVersion: 1 } }, { new: true });
-      rowsVersion = updatedPage?.rowsVersion || 0;
       await triggerLocalBackup();
     } else {
       const db = await getLocalDB();
@@ -2434,7 +2428,7 @@ app.patch('/api/pageRows/:name(*)/:rowId', async (req, res) => {
       await cleanupOrphanImages([oldRowData], [processedRow]);
     }
 
-    res.json({ success: true, rowsVersion });
+    res.json({ success: true });
   } catch (err: any) {
     if (err.message === 'SHARP_UNSUPPORTED_FORMAT') {
       return res.status(400).json({ requiresConfirmation: true, error: "Unsupported image format detected. The system can only process standard images (JPG, PNG, WEBP, GIF, AVIF, TIFF). Do you want to force save this file as-is without processing?" });
