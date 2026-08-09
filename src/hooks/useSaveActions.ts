@@ -47,7 +47,7 @@ export function useSaveActions(deps: {
     pageName?: string,
     force = false,
     mode: "append" | "replace" = "append"
-  ) => {
+  ): Promise<boolean> => {
     const targetPage = pageName || state.activePage;
     let currentRows = [...(state.pageRows[targetPage] || [])];
 
@@ -55,7 +55,7 @@ export function useSaveActions(deps: {
       const validation = validateReplacePayload(state.pageRows[targetPage], newRows);
       if (!validation.ok) {
         toast(`Save blocked: ${validation.reason}`);
-        return;
+        return false;
       }
       currentRows = newRows;
     } else {
@@ -94,7 +94,7 @@ export function useSaveActions(deps: {
               message: data.error,
               onConfirm: () => handleSaveRows(newRows, pageName, true, mode),
             });
-            return;
+            return false;
           }
         } else if (response.status === 404) {
           toast("This data was changed elsewhere. Refreshing to the latest version… please redo your change.");
@@ -103,7 +103,7 @@ export function useSaveActions(deps: {
           }
           toggleModal("addRow", false);
           setEditingRowId(null);
-          return;
+          return false;
         } else if (response.status === 409) {
           toast("Someone else changed this page while you were editing. Your change was not saved to avoid overwriting their work. The page has been refreshed, please redo your change.", 6000);
           if (refetchAndHydrateState) {
@@ -111,7 +111,7 @@ export function useSaveActions(deps: {
           }
           toggleModal("addRow", false);
           setEditingRowId(null);
-          return;
+          return false;
         }
         throw new Error("Database failed to save");
       }
@@ -243,10 +243,12 @@ export function useSaveActions(deps: {
           ? "Row updated successfully"
           : `${newRows.length} row(s) added successfully!`,
       );
+      return true;
     } catch (err) {
       console.error("Save Error:", err);
       // Agar database save karne mein fail ho jaye to user ko lal/error alert dein
       toast("❌ Error saving to database! Please try again.");
+      return false;
     }
   };
 

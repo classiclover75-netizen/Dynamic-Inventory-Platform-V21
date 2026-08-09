@@ -898,8 +898,10 @@ function AppContent() {
       return newRow;
     });
 
-    await handleSaveRows(updatedRows, state.activePage, true, "replace");
-    toast(`Column "${column.name}" deleted successfully (${deleteType} mode).`);
+    const saved = await handleSaveRows(updatedRows, state.activePage, true, "replace");
+    if (saved) {
+      toast(`Column "${column.name}" deleted successfully (${deleteType} mode).`);
+    }
   };
 
 
