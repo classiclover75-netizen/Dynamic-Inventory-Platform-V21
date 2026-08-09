@@ -2019,7 +2019,7 @@ app.post('/api/pages/update-config', async (req, res) => {
     }
     res.json({ success: true });
   } catch (err: any) {
-    res.status(500).json({ error: err.message || 'Failed to update config' });
+    sendSafeError(res, 500, err, 'Failed to update config', 'Failed to update config via update-config route');
   }
 });
 
@@ -2038,7 +2038,7 @@ app.put('/api/pageConfigs/:name(*)', async (req, res) => {
     }
     res.json({ success: true });
   } catch (err: any) {
-    res.status(500).json({ error: err.message || 'Failed to update config' });
+    sendSafeError(res, 500, err, 'Failed to update config', 'Failed to update config via pageConfigs route');
   }
 });
 
@@ -2268,7 +2268,7 @@ app.put('/api/pageRows/:name(*)', async (req, res) => {
     if (err.message === 'SHARP_UNSUPPORTED_FORMAT') {
       return res.status(400).json({ requiresConfirmation: true, error: "Unsupported image format detected. The system can only process standard images (JPG, PNG, WEBP, GIF, AVIF, TIFF). Do you want to force save this file as-is without processing?" });
     }
-    res.status(400).json({ error: err.message || 'Failed to update rows' });
+    sendSafeError(res, 400, err, 'Failed to update rows', 'Failed to update rows');
   }
 });
 
@@ -2384,8 +2384,7 @@ app.patch('/api/pageRows/:name(*)/bulk', async (req, res) => {
     if (err.message === 'SHARP_UNSUPPORTED_FORMAT') {
       return res.status(400).json({ requiresConfirmation: true, error: "Unsupported image format detected. Do you want to force save this file as-is without processing?" });
     }
-    console.error("PATCH Bulk Error:", err);
-    res.status(400).json({ error: err.message || 'Failed to bulk update' });
+    sendSafeError(res, 400, err, 'Failed to bulk update', 'PATCH Bulk Error');
   }
 });
 
@@ -2432,8 +2431,7 @@ app.patch('/api/pageRows/:name(*)/:rowId', async (req, res) => {
     if (err.message === 'SHARP_UNSUPPORTED_FORMAT') {
       return res.status(400).json({ requiresConfirmation: true, error: "Unsupported image format detected. The system can only process standard images (JPG, PNG, WEBP, GIF, AVIF, TIFF). Do you want to force save this file as-is without processing?" });
     }
-    console.error("PATCH Row Error:", err);
-    res.status(400).json({ error: err.message || 'Failed to update row' });
+    sendSafeError(res, 400, err, 'Failed to update row', 'PATCH Row Error');
   }
 });
 
