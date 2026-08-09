@@ -1428,7 +1428,7 @@ app.get('/api/export-zip/page/:name(*)', async (req, res) => {
 app.get('/api/state', async (_req, res) => {
   try {
     if (isUsingMongoDB) {
-      const pages = await Page.find({}, 'name');
+      const pages = await Page.find({}, 'name config.linkedSourcePage');
       const settings: any = await AppSettings.findOne() || {};
       
       const pageNames = pages.map(p => p.name);
@@ -1449,7 +1449,13 @@ app.get('/api/state', async (_req, res) => {
         globalRowNoWidth: settings.globalRowNoWidth,
         maxSearchHistory: settings.maxSearchHistory,
         sourceSuggestionsEnabled: settings.sourceSuggestionsEnabled,
-        pageOrder: settings.pageOrder || []
+        pageOrder: settings.pageOrder || [],
+        pageLinks: pages.reduce((acc: Record<string, string>, p: any) => {
+          if (p.config && typeof p.config.linkedSourcePage === 'string' && p.config.linkedSourcePage.trim() !== '') {
+            acc[p.name] = p.config.linkedSourcePage.trim();
+          }
+          return acc;
+        }, {})
       };
       
       return res.json(state);
@@ -1474,7 +1480,13 @@ app.get('/api/state', async (_req, res) => {
         globalRowNoWidth: db.settings?.globalRowNoWidth,
         maxSearchHistory: db.settings?.maxSearchHistory,
         sourceSuggestionsEnabled: db.settings?.sourceSuggestionsEnabled,
-        pageOrder: pageOrder
+        pageOrder: pageOrder,
+        pageLinks: db.pages.reduce((acc: Record<string, string>, p: any) => {
+          if (p.config && typeof p.config.linkedSourcePage === 'string' && p.config.linkedSourcePage.trim() !== '') {
+            acc[p.name] = p.config.linkedSourcePage.trim();
+          }
+          return acc;
+        }, {})
       };
       return res.json(state);
     }
