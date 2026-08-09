@@ -179,7 +179,7 @@ export const TableView = ({
     
     const pinnedOffsets: Record<string, number> = {};
     let currentLeftOffset = 0;
-    const hasRowReorder = !isSecondary && config.rowReorderEnabled;
+    const hasRowReorder = !isSecondary && config.rowReorderEnabled && !(typeof config.linkedSourcePage === 'string' && config.linkedSourcePage.trim() !== '');
     
     if (hasAnyExplicitPinned) {
       if (hasRowReorder) {
@@ -227,7 +227,7 @@ export const TableView = ({
         : 0;
     const colSpan =
       visibleColumns.length +
-      (!isSecondary && config.rowReorderEnabled ? 1 : 0) + 1;
+      (hasRowReorder ? 1 : 0) + 1;
 
     const colTokensMap: Record<string, string[]> = {};
     visibleColumns.forEach((col) => {
@@ -301,14 +301,14 @@ export const TableView = ({
           <table
             className="border-separate border-spacing-0 table-fixed w-max max-w-none text-[14px] font-normal"
             style={{
-              width: `${currentTable.getTotalSize() + (!isSecondary && config.rowReorderEnabled ? 40 : 0) + spacerWidth}px`,
+              width: `${currentTable.getTotalSize() + (hasRowReorder ? 40 : 0) + spacerWidth}px`,
             }}
             onMouseOver={handleTableMouseOver}
             onMouseOut={handleTableMouseOut}
           >
             <thead>
               <tr>
-                {!isSecondary && config.rowReorderEnabled && (
+                {hasRowReorder && (
                   <th
                     className={`sticky top-0 text-center p-1.5 border-r-[length:medium] border-b-[length:medium] border-[#e0e0e0] bg-[#f3f3f3] data-[hovered-col=true]:bg-[#fce7f3]`}
                     style={{
@@ -465,7 +465,7 @@ export const TableView = ({
                                   height: `${config.rowHeight || 100}px`,
                                 }}
                               >
-                                {!isSecondary && config.rowReorderEnabled && (
+                                {hasRowReorder && (
                                   <td
                                     className={`text-center p-1.5 border-r-[length:medium] border-b-[length:medium] border-[#e0e0e0] data-[hovered-col=true]:bg-[#f0f7ff] data-[hovered-row=true]:bg-[#e8f0fe] data-[hovered-exact=true]:!bg-[#d2e3fc] data-[hovered-exact=true]:shadow-[inset_0_0_0_3px_#2b579a,inset_0_2px_4px_0_rgba(0,0,0,0.05)] data-[hovered-exact=true]:relative data-[hovered-exact=true]:z-10 ${hasAnyExplicitPinned ? (!isSecondary && selectedRowIds.has(row.id) ? 'bg-[#e8f0fe]' : 'bg-white') : ''}`}
                                     style={{
