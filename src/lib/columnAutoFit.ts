@@ -16,37 +16,44 @@ export function computeAutoFitWidth(handleEl: HTMLElement, colKey: string): numb
     if (cellsToMeasure.length === 0) return null;
 
     let maxWidth = -1;
+    let styleEl: HTMLStyleElement | null = null;
 
-    for (const cell of cellsToMeasure) {
-      const target = (cell.firstElementChild as HTMLElement) || cell;
+    try {
+      for (const cell of cellsToMeasure) {
+        cell.setAttribute('data-autofit-target', '1');
+      }
 
-      const prevWhiteSpace = target.style.whiteSpace;
-      const prevWidth = target.style.width;
-      const prevMaxWidth = target.style.maxWidth;
-      const prevMinWidth = target.style.minWidth;
-      const prevOverflow = target.style.overflow;
+      const existingStyle = document.getElementById('autofit-measure-style');
+      if (existingStyle) {
+        existingStyle.remove();
+      }
 
-      try {
-        target.style.whiteSpace = 'nowrap';
-        target.style.width = 'max-content';
-        target.style.maxWidth = 'none';
-        target.style.minWidth = '0';
-        target.style.overflow = 'visible';
+      styleEl = document.createElement('style');
+      styleEl.id = 'autofit-measure-style';
+      styleEl.textContent = `
+        [data-autofit-target="1"] { overflow: visible !important; }
+        [data-autofit-target="1"] *:not(img):not(svg):not(canvas):not(video) { width: auto !important; max-width: none !important; min-width: 0 !important; white-space: nowrap !important; flex-shrink: 0 !important; text-overflow: clip !important; }
+        [data-autofit-target="1"] > * { width: max-content !important; }
+      `;
+      document.head.appendChild(styleEl);
 
-        const offsetWidth = target.offsetWidth;
-        if (offsetWidth > maxWidth) {
-          maxWidth = offsetWidth;
+      for (const cell of cellsToMeasure) {
+        const firstChild = cell.firstElementChild as HTMLElement;
+        const width = firstChild ? firstChild.offsetWidth : cell.scrollWidth;
+        if (width > maxWidth) {
+          maxWidth = width;
         }
-      } finally {
-        target.style.whiteSpace = prevWhiteSpace;
-        target.style.width = prevWidth;
-        target.style.maxWidth = prevMaxWidth;
-        target.style.minWidth = prevMinWidth;
-        target.style.overflow = prevOverflow;
+      }
+    } finally {
+      if (styleEl && styleEl.parentNode) {
+        styleEl.parentNode.removeChild(styleEl);
+      }
+      for (const cell of cellsToMeasure) {
+        cell.removeAttribute('data-autofit-target');
       }
     }
 
-    if (maxWidth <= 0 || Number.isNaN(maxWidth)) return null;
+    if (maxWidth <= 0 || !Number.isFinite(maxWidth)) return null;
 
     let finalWidth = Math.round(maxWidth + 24);
     if (finalWidth < 60) finalWidth = 60;
