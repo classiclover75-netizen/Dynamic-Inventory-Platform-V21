@@ -797,8 +797,7 @@ app.post('/api/upload-excel-images', upload.array('images', 2000), async (req, r
     res.json({ success: true, paths: uploadedPaths });
   } catch (err: any) {
     cleanupTempFiles(req.files as Express.Multer.File[]);
-    console.error('Failed to upload excel images:', err);
-    res.status(500).json({ error: err.message || 'Failed to upload images' });
+    sendSafeError(res, 500, err, 'Failed to upload images', 'Failed to upload excel images');
   }
 });
 
@@ -834,8 +833,7 @@ app.post('/api/upload-excel-media-bulk', upload.single('file'), async (req, res)
     res.json({ success: true, mediaMap });
   } catch (err: any) {
     cleanupTempFiles([req.file]);
-    console.error('Failed to extract media bulk:', err);
-    res.status(500).json({ error: err.message || 'Failed to extract media' });
+    sendSafeError(res, 500, err, 'Failed to extract media', 'Failed to extract media bulk');
   }
 });
 
@@ -1568,7 +1566,7 @@ app.get('/api/pages/delete-impact', async (req, res) => {
       });
     }
   } catch (err: any) {
-    res.status(500).json({ error: err.message || 'Failed to check delete impact' });
+    sendSafeError(res, 500, err, 'Failed to check delete impact', 'Failed to check delete impact');
   }
 });
 
@@ -1621,7 +1619,7 @@ app.post('/api/pages', async (req, res) => {
     if (err.code === 11000) {
       return res.status(409).json({ error: 'A page with that name already exists.' });
     }
-    res.status(500).json({ error: err.message || 'Failed to create page' });
+    sendSafeError(res, 500, err, 'Failed to create page', 'Failed to create page');
   }
 });
 
@@ -1749,7 +1747,7 @@ app.put('/api/pages/:name(*)/rename', async (req, res) => {
     if (err.code === 11000) {
       return res.status(409).json({ error: 'A page with that name already exists.' });
     }
-    res.status(500).json({ error: err.message || 'Failed to rename page' });
+    sendSafeError(res, 500, err, 'Failed to rename page', 'Failed to rename page');
   }
 });
 
@@ -1878,7 +1876,7 @@ app.delete('/api/pages/:name(*)', async (req, res) => {
     await cleanupOrphanImages(deletedRows, [], false, name);
     res.json({ success: true });
   } catch (err: any) {
-    res.status(500).json({ error: err.message || 'Failed to delete page' });
+    sendSafeError(res, 500, err, 'Failed to delete page', 'Failed to delete page');
   }
 });
 
