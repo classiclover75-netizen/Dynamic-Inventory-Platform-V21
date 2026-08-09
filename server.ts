@@ -3032,8 +3032,7 @@ app.put('/api/state', async (req, res) => {
     
     res.json({ success: true });
   } catch (err: any) {
-    console.error('Bulk sync error:', err);
-    res.status(400).json({ error: err.message || 'Failed to sync state' });
+    sendSafeError(res, 400, err, 'Failed to sync state', 'Bulk sync error');
   }
 });
 
@@ -3411,8 +3410,7 @@ async function startServer() {
 
   // Global error handler for API routes to prevent HTML error pages (e.g., from multer limits)
   app.use('/api', (err: any, req: any, res: any, next: any) => {
-    console.error('API Error:', err);
-    res.status(err.status || 500).json({ error: err.message || 'Internal Server Error' });
+    sendSafeError(res, err.status || 500, err, 'Internal Server Error', 'API Error');
   });
 
   if (process.env.NODE_ENV !== 'production') {
