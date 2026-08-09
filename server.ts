@@ -2524,8 +2524,7 @@ app.post('/api/pageRows/:name(*)/append', async (req, res) => {
     if (err.message === 'SHARP_UNSUPPORTED_FORMAT') {
       return res.status(400).json({ requiresConfirmation: true, error: "Unsupported image format detected. The system can only process standard images (JPG, PNG, WEBP, GIF, AVIF, TIFF). Do you want to force save this file as-is without processing?" });
     }
-    console.error("POST Append Error:", err);
-    res.status(400).json({ error: err.message || 'Failed to append rows' });
+    sendSafeError(res, 400, err, 'Failed to append rows', 'POST Append Error');
   }
 });
 
@@ -2565,8 +2564,7 @@ app.delete('/api/pageRows/:name(*)/:rowId', async (req, res) => {
     
     res.json({ success: true, rowsVersion });
   } catch (err: any) {
-    console.error("DELETE Row Error:", err);
-    res.status(400).json({ error: err.message || 'Failed to delete row' });
+    sendSafeError(res, 400, err, 'Failed to delete row', 'DELETE Row Error');
   }
 });
 
@@ -2583,7 +2581,7 @@ app.put('/api/settings', async (req, res) => {
     }
     res.json({ success: true });
   } catch (err: any) {
-    res.status(400).json({ error: err.message || 'Failed to update settings' });
+    sendSafeError(res, 400, err, 'Failed to update settings', 'Failed to update settings');
   }
 });
 
@@ -2742,8 +2740,7 @@ app.post('/api/admin/backfill-thumbnails', async (req, res) => {
     const summary = await backfillThumbnails(UPLOADS_DIR);
     res.json(summary);
   } catch (err: any) {
-    console.error('Error backfilling thumbnails:', err);
-    res.status(500).json({ error: err.message || 'Failed to backfill thumbnails' });
+    sendSafeError(res, 500, err, 'Failed to backfill thumbnails', 'Error backfilling thumbnails');
   }
 });
 
@@ -2793,7 +2790,7 @@ app.post('/api/admin/hard-clear', async (req, res) => {
 
     res.json({ success: true, pagesDeleted, rowsDeleted, settingsDeleted });
   } catch (err: any) {
-    res.status(500).json({ error: err.message || 'Failed to hard-clear database' });
+    sendSafeError(res, 500, err, 'Failed to hard-clear database', 'Failed to hard-clear database');
   }
 });
 
